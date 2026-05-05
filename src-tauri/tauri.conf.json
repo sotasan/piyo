@@ -14,9 +14,13 @@
       {
         "title": "piyo",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }
