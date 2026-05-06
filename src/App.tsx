@@ -1,26 +1,144 @@
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { useLayoutEffect, useRef, useState } from "react";
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useMotionValueEvent,
+  useTransform,
+} from "motion/react";
+import {
+  Group,
+  Panel,
+  Separator,
+  usePanelRef,
+} from "react-resizable-panels";
+import type { PanelSize } from "react-resizable-panels";
+import { getSvgPath } from "figma-squircle";
 import Sidebar from "./components/Sidebar";
+import SidebarToggle from "./components/SidebarToggle";
 import Terminal from "./components/Terminal";
+import Titlebar from "./components/Titlebar";
 import "./App.css";
 
+const TRAFFIC_LIGHTS_INSET_PX = 84;
+const DEFAULT_SIDEBAR_PX = 200;
+const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
+const CORNER_RADIUS = 12;
+const CORNER_SMOOTHING = 0.6;
+
+function useSquircleClipPath(radius: number, smoothing: number) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width === 0 || height === 0) return;
+      const path = getSvgPath({
+        width,
+        height,
+        cornerRadius: radius,
+        cornerSmoothing: smoothing,
+      });
+      el.style.clipPath = `path('${path}')`;
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [radius, smoothing]);
+
+  return { ref };
+}
+
 function App() {
+  const sidebarRef = usePanelRef();
+  const [collapsed, setCollapsed] = useState(false);
+  const sizeMV = useMotionValue(DEFAULT_SIDEBAR_PX);
+  const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
+  const isAnimatingRef = useRef(false);
+  const terminalRef = useRef(<Terminal />);
+  const { ref: mainPanelRef } = useSquircleClipPath(
+    CORNER_RADIUS,
+    CORNER_SMOOTHING,
+  );
+
+  const titleOpacity = useTransform(sizeMV, (v) => {
+    const max = lastExpandedRef.current;
+    if (max <= 0) return 1;
+    return Math.max(0, Math.min(1, 1 - v / max));
+  });
+
+  useMotionValueEvent(sizeMV, "change", (v) => {
+    sidebarRef.current?.resize(`${v}px`);
+  });
+
+  const handleSidebarResize = (size: PanelSize) => {
+    if (!isAnimatingRef.current && !collapsed && size.inPixels > 0) {
+      lastExpandedRef.current = size.inPixels;
+      sizeMV.set(size.inPixels);
+    }
+  };
+
+  const toggle = () => {
+    if (!collapsed) {
+      isAnimatingRef.current = true;
+      animate(sizeMV, 0, {
+        ...TWEEN,
+        onComplete: () => {
+          isAnimatingRef.current = false;
+          setCollapsed(true);
+        },
+      });
+    } else {
+      setCollapsed(false);
+      isAnimatingRef.current = true;
+      animate(sizeMV, lastExpandedRef.current, {
+        ...TWEEN,
+        onComplete: () => {
+          isAnimatingRef.current = false;
+        },
+      });
+    }
+  };
+
   return (
-    <div className="app">
-      <div className="drag-bar" data-tauri-drag-region />
-      <Group className="app-body" orientation="horizontal">
+    <div className="relative w-full h-full bg-transparent">
+      <Group className="h-full" orientation="horizontal">
         <Panel
-          defaultSize="200px"
-          minSize="48px"
+          panelRef={sidebarRef}
+          defaultSize={`${DEFAULT_SIDEBAR_PX}px`}
+          minSize="0%"
           maxSize="480px"
           groupResizeBehavior="preserve-pixel-size"
+          className="overflow-hidden relative"
+          onResize={handleSidebarResize}
         >
-          <Sidebar />
+          <div className="absolute inset-0 top-11">
+            <Sidebar />
+          </div>
         </Panel>
-        <Separator />
-        <Panel>
-          <Terminal />
+        {!collapsed && <Separator />}
+        <Panel
+          elementRef={mainPanelRef}
+          className="relative bg-[#1a1b26] rounded-[12px] overflow-hidden"
+        >
+          <div className="absolute inset-0 top-11">{terminalRef.current}</div>
         </Panel>
       </Group>
+      <Titlebar
+        className="absolute inset-x-0 top-0 z-10"
+        style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
+      >
+        <SidebarToggle onClick={toggle} />
+        <motion.span
+          style={{ opacity: titleOpacity }}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[#a9b1d6] text-sm select-none pointer-events-none"
+        >
+          Piyo
+        </motion.span>
+      </Titlebar>
     </div>
   );
 }

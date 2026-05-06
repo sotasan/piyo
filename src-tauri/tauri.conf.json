@@ -17,7 +17,8 @@
         "height": 600,
         "transparent": true,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 16, "y": 24 }
       }
     ],
     "macOSPrivateApi": true,
