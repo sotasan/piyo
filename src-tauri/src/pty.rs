@@ -43,7 +43,7 @@ fn hushlogin() -> bool {
 }
 
 fn build_command(shell: &str) -> Result<CommandBuilder> {
-    let user = whoami::fallible::username().context("failed to read current username")?;
+    let user = whoami::username().context("failed to read current username")?;
     let flags = if hushlogin() { "-flpq" } else { "-flp" };
     let mut cmd = CommandBuilder::new("/usr/bin/login");
     cmd.arg(flags);
