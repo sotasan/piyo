@@ -21,7 +21,7 @@ function Terminal() {
     if (!container) return;
 
     const term = new XtermTerminal({
-      fontSize: 16,
+      fontSize: 15,
       fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace",
       theme: { background: "#1a1b26", foreground: "#a9b1d6" },
       cursorBlink: true,
@@ -47,15 +47,21 @@ function Terminal() {
     let unlistenData: (() => void) | undefined;
     let unlistenExit: (() => void) | undefined;
     const ro = new ResizeObserver(() => {
-      try {
-        fit.fit();
-      } catch {}
+      setTimeout(() => {
+        if (cancelled) return;
+        try {
+          fit.fit();
+        } catch {}
+      });
     });
 
     (async () => {
       await webFonts.loadFonts(["JetBrains Mono Variable"]);
       if (cancelled) return;
       term.open(container);
+      if (term.element) {
+        term.element.style.padding = "0 12px";
+      }
       try {
         term.loadAddon(new WebglAddon());
       } catch {
@@ -91,7 +97,7 @@ function Terminal() {
     };
   }, []);
 
-  return <div ref={containerRef} className="absolute inset-0" />;
+  return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#1a1b26]" />;
 }
 
 export default Terminal;

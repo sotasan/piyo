@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   animate,
   motion,
@@ -13,7 +13,6 @@ import {
   usePanelRef,
 } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
-import { getSvgPath } from "figma-squircle";
 import Sidebar from "./components/Sidebar";
 import SidebarToggle from "./components/SidebarToggle";
 import Terminal from "./components/Terminal";
@@ -23,34 +22,6 @@ import "./App.css";
 const TRAFFIC_LIGHTS_INSET_PX = 84;
 const DEFAULT_SIDEBAR_PX = 200;
 const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
-const CORNER_RADIUS = 12;
-const CORNER_SMOOTHING = 0.6;
-
-function useSquircleClipPath(radius: number, smoothing: number) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => {
-      const { width, height } = el.getBoundingClientRect();
-      if (width === 0 || height === 0) return;
-      const path = getSvgPath({
-        width,
-        height,
-        cornerRadius: radius,
-        cornerSmoothing: smoothing,
-      });
-      el.style.clipPath = `path('${path}')`;
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [radius, smoothing]);
-
-  return { ref };
-}
 
 function App() {
   const sidebarRef = usePanelRef();
@@ -59,10 +30,6 @@ function App() {
   const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
   const isAnimatingRef = useRef(false);
   const terminalRef = useRef(<Terminal />);
-  const { ref: mainPanelRef } = useSquircleClipPath(
-    CORNER_RADIUS,
-    CORNER_SMOOTHING,
-  );
 
   const titleOpacity = useTransform(sizeMV, (v) => {
     const max = lastExpandedRef.current;
@@ -120,10 +87,7 @@ function App() {
           </div>
         </Panel>
         {!collapsed && <Separator />}
-        <Panel
-          elementRef={mainPanelRef}
-          className="relative bg-[#1a1b26] rounded-[12px] overflow-hidden"
-        >
+        <Panel className="relative bg-[#1a1b26] rounded-[16px] overflow-hidden">
           <div className="absolute inset-0 top-11">{terminalRef.current}</div>
         </Panel>
       </Group>
