@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+
+type PtyEvent =
+  | { kind: "data"; data: number[] }
+  | { kind: "exit" };
 import { Terminal as XtermTerminal } from "@xterm/xterm";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -44,8 +47,6 @@ function Terminal() {
     );
 
     let cancelled = false;
-    let unlistenData: (() => void) | undefined;
-    let unlistenExit: (() => void) | undefined;
     const ro = new ResizeObserver(() => {
       setTimeout(() => {
         if (cancelled) return;
@@ -70,13 +71,15 @@ function Terminal() {
       fit.fit();
       ro.observe(container);
 
-      unlistenData = await listen<number[]>("pty:data", (event) => {
+      const events = new Channel<PtyEvent>();
+      events.onmessage = (event) => {
         if (cancelled) return;
-        term.write(new Uint8Array(event.payload));
-      });
-      unlistenExit = await listen("pty:exit", () => {
-        term.write("\r\n[process exited]\r\n");
-      });
+        if (event.kind === "data") {
+          term.write(new Uint8Array(event.data));
+        } else if (event.kind === "exit") {
+          term.write("\r\n[process exited]\r\n");
+        }
+      };
 
       term.onData((data) => {
         invoke("pty_write", { data });
@@ -85,14 +88,12 @@ function Terminal() {
         invoke("pty_resize", { cols, rows });
       });
 
-      await invoke("pty_spawn", { cols: term.cols, rows: term.rows });
+      await invoke("pty_spawn", { events, cols: term.cols, rows: term.rows });
     })();
 
     return () => {
       cancelled = true;
       ro.disconnect();
-      unlistenData?.();
-      unlistenExit?.();
       term.dispose();
     };
   }, []);
