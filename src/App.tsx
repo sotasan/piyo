@@ -25,8 +25,8 @@ const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
 
 function App() {
   const sidebarRef = usePanelRef();
-  const [collapsed, setCollapsed] = useState(false);
-  const sizeMV = useMotionValue(DEFAULT_SIDEBAR_PX);
+  const [collapsed, setCollapsed] = useState(true);
+  const sizeMV = useMotionValue(0);
   const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
   const isAnimatingRef = useRef(false);
   const terminalRef = useRef(<Terminal />);
@@ -75,7 +75,7 @@ function App() {
       <Group className="h-full" orientation="horizontal">
         <Panel
           panelRef={sidebarRef}
-          defaultSize={`${DEFAULT_SIDEBAR_PX}px`}
+          defaultSize="0px"
           minSize="0%"
           maxSize="480px"
           groupResizeBehavior="preserve-pixel-size"
