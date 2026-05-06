@@ -12,6 +12,8 @@
     width: 100vw;
     height: 100vh;
     background: transparent;
+    user-select: none;
+    -webkit-user-select: none;
   }
 }
 
@@ -26,4 +28,9 @@
   [data-separator][data-resizing] {
     background: rgba(169, 177, 214, 0.2);
   }
+
+}
+
+.xterm .xterm-viewport {
+  background-color: transparent !important;
 }

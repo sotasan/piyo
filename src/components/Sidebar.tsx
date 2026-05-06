@@ -4,7 +4,7 @@ function Sidebar() {
       <button
         type="button"
         aria-label="New tab"
-        className="w-8 h-8 border-0 rounded-md bg-transparent text-[#a9b1d6] text-lg leading-none cursor-pointer hover:bg-[#a9b1d6]/15"
+        className="w-8 h-8 border-0 rounded-md bg-transparent text-[#a9b1d6] text-lg leading-none hover:bg-[#a9b1d6]/15"
       >
         +
       </button>
