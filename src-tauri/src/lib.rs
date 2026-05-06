@@ -1,3 +1,4 @@
+mod context_menu;
 mod pty;
 
 use tauri::Manager;
@@ -11,6 +12,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             app.manage(PtyState::default());
+            context_menu::install();
 
             let window = app.get_webview_window("main").unwrap();
             apply_vibrancy(
