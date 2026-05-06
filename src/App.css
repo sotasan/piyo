@@ -1,72 +1,29 @@
-:root {
-  color-scheme: dark;
-  background: transparent;
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    background: transparent;
+  }
+
+  body,
+  #root {
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    background: transparent;
+  }
 }
 
-body,
-#root {
-  margin: 0;
-  width: 100vw;
-  height: 100vh;
-  background: transparent;
-}
+@layer components {
+  [data-separator] {
+    width: 4px;
+    background: transparent;
+    cursor: col-resize;
+  }
 
-.app {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-}
-
-.drag-bar {
-  height: 32px;
-  flex-shrink: 0;
-}
-
-.app-body {
-  flex: 1;
-  min-height: 0;
-}
-
-.sidebar {
-  height: 100%;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 0;
-  gap: 8px;
-}
-
-.sidebar-button {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #a9b1d6;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.sidebar-button:hover {
-  background: rgba(169, 177, 214, 0.15);
-}
-
-[data-separator] {
-  width: 4px;
-  background: transparent;
-  cursor: col-resize;
-}
-
-[data-separator]:hover,
-[data-separator][data-resizing] {
-  background: rgba(169, 177, 214, 0.2);
-}
-
-.terminal {
-  width: 100%;
-  height: 100%;
+  [data-separator]:hover,
+  [data-separator][data-resizing] {
+    background: rgba(169, 177, 214, 0.2);
+  }
 }
