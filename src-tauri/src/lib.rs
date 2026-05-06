@@ -1,3 +1,4 @@
+mod config;
 mod context_menu;
 mod pty;
 
@@ -12,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             app.manage(PtyState::default());
+            app.manage(config::load().unwrap_or_default());
             context_menu::install();
 
             #[cfg(target_os = "macos")]
