@@ -14,9 +14,9 @@ pub fn run() {
             app.manage(PtyState::default());
             context_menu::install();
 
-            let window = app.get_webview_window("main").unwrap();
+            #[cfg(target_os = "macos")]
             apply_vibrancy(
-                &window,
+                &app.get_webview_window("main").unwrap(),
                 NSVisualEffectMaterial::Sidebar,
                 Some(NSVisualEffectState::Active),
                 None,
