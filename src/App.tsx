@@ -2,11 +2,11 @@ import { useRef, useState } from "react";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
-import Sidebar from "./components/Sidebar";
-import SidebarToggle from "./components/SidebarToggle";
-import Terminal from "./components/Terminal";
-import Titlebar from "./components/Titlebar";
-import "./App.css";
+import Sidebar from "@/components/Sidebar";
+import SidebarToggle from "@/components/SidebarToggle";
+import Terminal from "@/components/Terminal";
+import Titlebar from "@/components/Titlebar";
+import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
 const DEFAULT_SIDEBAR_PX = 200;
