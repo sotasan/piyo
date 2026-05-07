@@ -23,10 +23,10 @@ fn user_theme_path(name: &str) -> Option<PathBuf> {
 }
 
 fn resolve(name: &str) -> String {
-    if let Some(path) = user_theme_path(name) {
-        if let Ok(css) = std::fs::read_to_string(&path) {
-            return css;
-        }
+    if let Some(path) = user_theme_path(name)
+        && let Ok(css) = std::fs::read_to_string(&path)
+    {
+        return css;
     }
     if let Some(css) = builtin(name) {
         return css;
