@@ -1,16 +1,21 @@
 use anyhow::{Context, Result};
 use config::{Config, File, FileFormat};
-use etcetera::{app_strategy::AppStrategyArgs, choose_app_strategy, AppStrategy};
-use serde::Deserialize;
+use etcetera::{AppStrategy, app_strategy::AppStrategyArgs, choose_app_strategy};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_TOML: &str = include_str!("../config/default.toml");
 
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configuration {
     pub font_family: String,
     pub font_size: u16,
+    pub padding: String,
     pub theme: String,
+}
+
+#[tauri::command]
+pub fn get_config(config: tauri::State<'_, Configuration>) -> Configuration {
+    config.inner().clone()
 }
 
 pub fn app_strategy() -> Result<impl AppStrategy> {
