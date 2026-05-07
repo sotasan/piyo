@@ -1,40 +1,40 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: var(--theme-background);
-  --color-foreground: var(--theme-foreground);
+    --color-background: var(--theme-background);
+    --color-foreground: var(--theme-foreground);
 }
 
 @layer base {
-  :root {
-    color-scheme: dark;
-    background: transparent;
-  }
+    :root {
+        color-scheme: dark;
+        background: transparent;
+    }
 
-  body,
-  #root {
-    margin: 0;
-    width: 100vw;
-    height: 100vh;
-    background: transparent;
-    user-select: none;
-    -webkit-user-select: none;
-  }
+    body,
+    #root {
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        background: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+    }
 }
 
 @layer components {
-  [data-separator] {
-    width: 4px;
-    background: transparent;
-    cursor: col-resize;
-  }
+    [data-separator] {
+        width: 4px;
+        background: transparent;
+        cursor: col-resize;
+    }
 
-  [data-separator]:hover,
-  [data-separator][data-resizing] {
-    background: color-mix(in oklab, var(--theme-foreground) 20%, transparent);
-  }
+    [data-separator]:hover,
+    [data-separator][data-resizing] {
+        background: color-mix(in oklab, var(--theme-foreground) 20%, transparent);
+    }
 }
 
 .xterm .xterm-viewport {
-  background-color: transparent !important;
+    background-color: transparent !important;
 }
