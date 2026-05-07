@@ -23,10 +23,16 @@ function Terminal() {
     const container = containerRef.current;
     if (!container) return;
 
+    const styles = getComputedStyle(document.documentElement);
+    const cssVar = (name: string) => styles.getPropertyValue(name).trim();
     const term = new XtermTerminal({
       fontSize: 15,
       fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace",
-      theme: { background: "#1a1b26", foreground: "#a9b1d6" },
+      theme: {
+        background: cssVar("--theme-background"),
+        foreground: cssVar("--theme-foreground"),
+        cursor: cssVar("--theme-cursor"),
+      },
       cursorBlink: true,
       allowProposedApi: true,
     });
@@ -98,7 +104,7 @@ function Terminal() {
     };
   }, []);
 
-  return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-[#1a1b26]" />;
+  return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;
 }
 
 export default Terminal;

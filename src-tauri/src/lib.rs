@@ -1,11 +1,13 @@
 mod config;
 mod context_menu;
 mod pty;
+mod theme;
 
 use tauri::Manager;
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
 use pty::{pty_resize, pty_spawn, pty_write, PtyState};
+use theme::get_theme_css;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,7 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             app.manage(PtyState::default());
-            app.manage(config::load().unwrap_or_default());
+            app.manage(config::load());
             context_menu::install();
 
             #[cfg(target_os = "macos")]
@@ -27,7 +29,12 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize])
+        .invoke_handler(tauri::generate_handler![
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            get_theme_css
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

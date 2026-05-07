@@ -87,7 +87,7 @@ function App() {
           </div>
         </Panel>
         {!collapsed && <Separator />}
-        <Panel className="relative bg-[#1a1b26] rounded-[16px] overflow-hidden">
+        <Panel className="relative bg-background rounded-[16px] overflow-hidden">
           <div className="absolute inset-0 top-11">{terminalRef.current}</div>
         </Panel>
       </Group>
@@ -98,7 +98,7 @@ function App() {
         <SidebarToggle onClick={toggle} />
         <motion.span
           style={{ opacity: titleOpacity }}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[#a9b1d6] text-sm select-none pointer-events-none"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
         >
           Piyo
         </motion.span>

@@ -37,7 +37,7 @@ pub struct PtyState {
 }
 
 fn hushlogin() -> bool {
-    dirs::home_dir()
+    etcetera::home_dir()
         .map(|home| home.join(".hushlogin").exists())
         .unwrap_or(false)
 }
