@@ -4,9 +4,9 @@ function Sidebar() {
             <button
                 type="button"
                 aria-label="New tab"
-                className="w-8 h-8 border-0 rounded-md bg-transparent text-foreground text-lg leading-none hover:bg-foreground/15"
+                className="w-8 h-8 border-0 rounded-md bg-transparent text-foreground inline-flex items-center justify-center hover:bg-foreground/15"
             >
-                +
+                <span aria-hidden="true" className="icon-[lucide--plus] w-4 h-4" />
             </button>
         </aside>
     );
