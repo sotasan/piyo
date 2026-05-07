@@ -1,5 +1,6 @@
 :root {
     --theme-background: #24273a;
-    --theme-foreground: #cad3f5;
+    --theme-border: #363a4f;
     --theme-cursor: #f4dbd6;
+    --theme-foreground: #cad3f5;
 }
