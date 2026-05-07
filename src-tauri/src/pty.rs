@@ -1,10 +1,10 @@
 use std::io::{Read, Write};
 use std::sync::Mutex;
 
-use anyhow::{anyhow, Context, Result};
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
-use tauri::ipc::Channel;
+use anyhow::{Context, Result, anyhow};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tauri::State;
+use tauri::ipc::Channel;
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
