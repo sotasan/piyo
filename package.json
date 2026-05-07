@@ -5,9 +5,10 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build",
+        "build": "vite build",
         "preview": "vite preview",
         "tauri": "tauri",
+        "check-types": "tsc -b",
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "format": "oxfmt",
@@ -34,6 +35,8 @@
     "devDependencies": {
         "@tailwindcss/vite": "^4.2.4",
         "@tauri-apps/cli": "^2.11.1",
+        "@tsconfig/node-lts": "^24.0.0",
+        "@tsconfig/vite-react": "^7.0.2",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.1",
