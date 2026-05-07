@@ -9,7 +9,7 @@ function SidebarToggle({ onClick }: Props) {
       aria-label="Toggle sidebar"
       onClick={onClick}
       data-tauri-drag-region={false}
-      className="w-7 h-7 flex items-center justify-center rounded-md border-0 bg-transparent text-[#a9b1d6] hover:bg-[#a9b1d6]/15"
+      className="w-7 h-7 flex items-center justify-center rounded-md border-0 bg-transparent text-foreground hover:bg-foreground/15"
     >
       <svg
         width="14"

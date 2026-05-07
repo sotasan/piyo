@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-background: var(--theme-background);
+  --color-foreground: var(--theme-foreground);
+}
+
 @layer base {
   :root {
     color-scheme: dark;
@@ -26,9 +31,8 @@
 
   [data-separator]:hover,
   [data-separator][data-resizing] {
-    background: rgba(169, 177, 214, 0.2);
+    background: color-mix(in oklab, var(--theme-foreground) 20%, transparent);
   }
-
 }
 
 .xterm .xterm-viewport {
