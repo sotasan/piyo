@@ -32,6 +32,7 @@ function Terminal() {
                 cursor: cssVar("--theme-cursor"),
             },
             cursorBlink: true,
+            cursorStyle: "bar",
             allowProposedApi: true,
         });
         const fit = new FitAddon();
@@ -65,7 +66,7 @@ function Terminal() {
             if (cancelled) return;
             term.open(container);
             if (term.element) {
-                term.element.style.padding = "0 12px";
+                term.element.style.padding = "0 8px";
             }
             try {
                 term.loadAddon(new WebglAddon());
