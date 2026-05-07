@@ -4,9 +4,10 @@ mod pty;
 mod theme;
 
 use tauri::Manager;
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
-use pty::{pty_resize, pty_spawn, pty_write, PtyState};
+use config::get_config;
+use pty::{PtyState, pty_resize, pty_spawn, pty_write};
 use theme::get_theme_css;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,7 +21,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             apply_vibrancy(
-                &app.get_webview_window("main").unwrap(),
+                app.get_webview_window("main").unwrap(),
                 NSVisualEffectMaterial::Sidebar,
                 Some(NSVisualEffectState::Active),
                 None,
@@ -33,6 +34,7 @@ pub fn run() {
             pty_spawn,
             pty_write,
             pty_resize,
+            get_config,
             get_theme_css
         ])
         .run(tauri::generate_context!())
