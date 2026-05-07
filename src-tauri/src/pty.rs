@@ -1,10 +1,11 @@
 use std::io::{Read, Write};
+use std::path::Path;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
-use tauri::State;
 use tauri::ipc::Channel;
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -36,13 +37,80 @@ pub struct PtyState {
     writer: Mutex<Option<Box<dyn Write + Send>>>,
 }
 
+enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    Other,
+}
+
+impl Shell {
+    fn detect(path: &str) -> Self {
+        match Path::new(path).file_name().and_then(|n| n.to_str()) {
+            Some("bash") => Self::Bash,
+            Some("zsh") => Self::Zsh,
+            Some("fish") => Self::Fish,
+            _ => Self::Other,
+        }
+    }
+
+    fn exec_inner(&self, shell: &str, integration_dir: &Path) -> String {
+        match self {
+            Self::Bash => {
+                let rcfile = integration_dir
+                    .join("bash")
+                    .join(concat!(env!("CARGO_PKG_NAME"), ".bash"));
+                let escaped = rcfile.to_string_lossy().replace('\'', "'\\''");
+                format!("exec {shell} --rcfile '{escaped}'")
+            }
+            _ => format!("exec -l {shell}"),
+        }
+    }
+
+    fn apply_env(&self, cmd: &mut CommandBuilder, integration_dir: &Path) {
+        match self {
+            Self::Zsh => {
+                if let Ok(prev) = std::env::var("ZDOTDIR") {
+                    cmd.env("PIYO_ZSH_ZDOTDIR", prev);
+                }
+                cmd.env("ZDOTDIR", integration_dir.join("zsh"));
+            }
+            Self::Fish => {
+                let dir = integration_dir.to_string_lossy();
+                let existing = std::env::var("XDG_DATA_DIRS")
+                    .unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+                let data_dirs = if existing.split(':').any(|p| p == dir) {
+                    existing
+                } else {
+                    format!("{dir}:{existing}")
+                };
+                cmd.env("XDG_DATA_DIRS", data_dirs);
+            }
+            Self::Bash | Self::Other => {}
+        }
+    }
+}
+
 fn hushlogin() -> bool {
     etcetera::home_dir()
         .map(|home| home.join(".hushlogin").exists())
         .unwrap_or(false)
 }
 
-fn build_command(shell: &str) -> Result<CommandBuilder> {
+fn apply_common_env(cmd: &mut CommandBuilder) {
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("TERM_PROGRAM", env!("CARGO_PKG_NAME"));
+    cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+    let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
+    cmd.env("LANG", lang);
+}
+
+fn build_command(
+    shell_path: &str,
+    shell: &Shell,
+    integration_dir: &Path,
+) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
     let flags = if hushlogin() { "-flpq" } else { "-flp" };
     let mut cmd = CommandBuilder::new("/usr/bin/login");
@@ -52,21 +120,15 @@ fn build_command(shell: &str) -> Result<CommandBuilder> {
     cmd.arg("--noprofile");
     cmd.arg("--norc");
     cmd.arg("-c");
-    cmd.arg(format!("exec -l {}", shell));
+    cmd.arg(shell.exec_inner(shell_path, integration_dir));
+    apply_common_env(&mut cmd);
+    shell.apply_env(&mut cmd, integration_dir);
     Ok(cmd)
-}
-
-fn apply_env(cmd: &mut CommandBuilder) {
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
-    cmd.env("TERM_PROGRAM", env!("CARGO_PKG_NAME"));
-    cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
-    let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
-    cmd.env("LANG", lang);
 }
 
 #[tauri::command]
 pub async fn pty_spawn(
+    app: AppHandle,
     state: State<'_, PtyState>,
     events: Channel<PtyEvent>,
     cols: u16,
@@ -85,9 +147,14 @@ pub async fn pty_spawn(
         })
         .context("failed to open pty")?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    let mut cmd = build_command(&shell)?;
-    apply_env(&mut cmd);
+    let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    let shell = Shell::detect(&shell_path);
+    let integration_dir = app
+        .path()
+        .resource_dir()
+        .context("failed to resolve resource dir")?
+        .join("shell");
+    let cmd = build_command(&shell_path, &shell, &integration_dir)?;
 
     let mut child = pair
         .slave
