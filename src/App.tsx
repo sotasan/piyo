@@ -76,8 +76,10 @@ function App() {
                     </div>
                 </Panel>
                 {!collapsed && <Separator />}
-                <Panel className="relative bg-background rounded-[16px] overflow-hidden">
-                    <div className="absolute inset-0 top-11">{terminalRef.current}</div>
+                <Panel className="relative">
+                    <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-[16px] overflow-hidden">
+                        {terminalRef.current}
+                    </div>
                 </Panel>
             </Group>
             <Titlebar

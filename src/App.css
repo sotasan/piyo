@@ -29,11 +29,6 @@
         background: transparent;
         cursor: col-resize;
     }
-
-    [data-separator]:hover,
-    [data-separator][data-resizing] {
-        background: color-mix(in oklab, var(--theme-foreground) 20%, transparent);
-    }
 }
 
 .xterm .xterm-viewport {
