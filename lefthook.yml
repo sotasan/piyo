@@ -1,0 +1,14 @@
+pre-commit:
+    parallel: true
+    jobs:
+        - name: oxfmt
+          run: bun run format:check --no-error-on-unmatched-pattern {staged_files}
+
+        - name: oxlint
+          glob: "*.{js,jsx,ts,tsx}"
+          run: bun run lint {staged_files}
+
+        - name: rustfmt
+          root: src-tauri
+          glob: "*.rs"
+          run: cargo fmt --check
