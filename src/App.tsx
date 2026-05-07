@@ -84,7 +84,7 @@ function App() {
                 className="absolute inset-x-0 top-0 z-10"
                 style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
             >
-                <SidebarToggle onClick={toggle} />
+                <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 <motion.span
                     style={{ opacity: titleOpacity }}
                     className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
