@@ -1,6 +1,7 @@
-# 🐥 Piyo
+<h1 align="center">🐥 Piyo</h1>
+<p align="center">The coziest terminal emulator.</p>
 
-The coziest terminal emulator.
+![Piyo](.github/assets/screenshot.png)
 
 ## License
 
