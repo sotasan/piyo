@@ -21,6 +21,15 @@ type AppConfig = {
     theme: string;
 };
 
+const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
+
+function fontStack(family: string): string {
+    return [family, ...FALLBACK_FONTS]
+        .filter(Boolean)
+        .map((f) => (f.includes(" ") ? `'${f}'` : f))
+        .join(", ");
+}
+
 function readThemeColors() {
     const styles = getComputedStyle(document.documentElement);
     const v = (name: string) => styles.getPropertyValue(name).trim();
@@ -47,7 +56,7 @@ function Terminal() {
 
             const term = new XtermTerminal({
                 fontSize: config.font_size,
-                fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace",
+                fontFamily: fontStack(config.font_family),
                 theme: readThemeColors(),
                 cursorBlink: true,
                 cursorStyle: "bar",
@@ -84,7 +93,7 @@ function Terminal() {
                 term.dispose();
             };
 
-            await webFonts.loadFonts(["JetBrains Mono Variable"]);
+            await webFonts.loadFonts([FALLBACK_FONTS[0]]);
             if (ac.signal.aborted) return;
 
             term.open(container);
