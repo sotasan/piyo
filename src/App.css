@@ -34,4 +34,18 @@
 
 .xterm .xterm-viewport {
     background-color: transparent !important;
+    scrollbar-width: none;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+    display: none;
+}
+
+.xterm .xterm-scrollbar.xterm-vertical .xterm-slider {
+    background-color: color-mix(in oklab, var(--theme-foreground) 30%, transparent);
+    border-radius: 9999px;
+}
+
+.xterm .xterm-decoration-overview-ruler {
+    display: none !important;
 }
