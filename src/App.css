@@ -3,6 +3,7 @@
 
 @theme inline {
     --color-background: var(--theme-background);
+    --color-border: var(--theme-border);
     --color-foreground: var(--theme-foreground);
 }
 
