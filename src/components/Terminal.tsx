@@ -81,7 +81,7 @@ function Terminal() {
             term.unicode.activeVersion = "15-graphemes";
 
             const ro = new ResizeObserver(() => {
-                queueMicrotask(() => {
+                setTimeout(() => {
                     if (ac.signal.aborted) return;
                     try {
                         fit.fit();
