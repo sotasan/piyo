@@ -12,3 +12,7 @@ pre-commit:
           root: src-tauri
           glob: "*.rs"
           run: cargo fmt --check
+
+        - name: tsc
+          glob: "*.{ts,tsx}"
+          run: bun run check-types
