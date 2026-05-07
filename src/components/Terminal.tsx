@@ -112,6 +112,9 @@ function Terminal() {
             };
             term.onData((data) => invoke("pty_write", { data }));
             term.onResize(({ cols, rows }) => invoke("pty_resize", { cols, rows }));
+            term.buffer.onBufferChange((buf) => {
+                term.options.cursorStyle = buf.type === "alternate" ? "block" : "bar";
+            });
 
             await invoke("pty_spawn", { events, cols: term.cols, rows: term.rows });
         })();
