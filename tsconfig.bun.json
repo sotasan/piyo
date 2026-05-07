@@ -1,0 +1,7 @@
+{
+    "extends": "@tsconfig/bun/tsconfig.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.bun.tsbuildinfo"
+    },
+    "include": ["vite.config.ts"]
+}
