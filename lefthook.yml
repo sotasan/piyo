@@ -1,6 +1,11 @@
 pre-commit:
     parallel: true
     jobs:
+        - name: clippy
+          root: src-tauri
+          glob: "*.rs"
+          run: cargo clippy -- -D warnings
+
         - name: oxfmt
           run: bun run format:check --no-error-on-unmatched-pattern {staged_files}
 
