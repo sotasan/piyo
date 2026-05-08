@@ -29,9 +29,8 @@ impl OscPerformer {
     }
 
     fn dispatch_agent(&self, name: &str, subcommand: &str, payload: &str) {
-        match (name, subcommand) {
-            ("claude", "stop") => self.handle_claude_stop(payload),
-            _ => {}
+        if let ("claude", "stop") = (name, subcommand) {
+            self.handle_claude_stop(payload);
         }
     }
 
@@ -82,8 +81,12 @@ impl Perform for OscPerformer {
                 self.notify(title, &body);
             }
             b"7496" => {
-                let Some(name) = utf8_param(params, 1) else { return };
-                let Some(subcommand) = utf8_param(params, 2) else { return };
+                let Some(name) = utf8_param(params, 1) else {
+                    return;
+                };
+                let Some(subcommand) = utf8_param(params, 2) else {
+                    return;
+                };
                 let payload = join_payload(params, 3).unwrap_or_default();
                 self.dispatch_agent(&name, &subcommand, &payload);
             }
