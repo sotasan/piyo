@@ -65,7 +65,8 @@ function Terminal() {
             });
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    term.clear();
+                    term.write("\x1b[3J");
+                    invoke("pty_write", { data: "\x0c" });
                     return false;
                 }
                 return true;
