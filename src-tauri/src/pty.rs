@@ -43,6 +43,7 @@ enum Shell {
     Bash,
     Zsh,
     Fish,
+    Nu,
     Other,
 }
 
@@ -52,6 +53,7 @@ impl Shell {
             Some("bash") => Self::Bash,
             Some("zsh") => Self::Zsh,
             Some("fish") => Self::Fish,
+            Some("nu") => Self::Nu,
             _ => Self::Other,
         }
     }
@@ -78,7 +80,7 @@ impl Shell {
                 }
                 cmd.env("ZDOTDIR", integration_dir.join("zsh"));
             }
-            Self::Fish => {
+            Self::Fish | Self::Nu => {
                 let dir = integration_dir.to_string_lossy();
                 let existing = std::env::var("XDG_DATA_DIRS")
                     .unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
