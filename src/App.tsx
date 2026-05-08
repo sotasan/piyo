@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
@@ -15,10 +16,18 @@ const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
 function App() {
     const sidebarRef = usePanelRef();
     const [collapsed, setCollapsed] = useState(true);
+    const [title, setTitle] = useState("Piyo");
     const sizeMV = useMotionValue(0);
     const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
     const isAnimatingRef = useRef(false);
     const terminalRef = useRef(<Terminal />);
+
+    useEffect(() => {
+        const unlisten = listen<string>("pty:title", (e) => setTitle(e.payload));
+        return () => {
+            unlisten.then((u) => u());
+        };
+    }, []);
 
     const titleOpacity = useTransform(sizeMV, (v) => {
         const max = lastExpandedRef.current;
@@ -91,7 +100,7 @@ function App() {
                     style={{ opacity: titleOpacity }}
                     className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
                 >
-                    Piyo
+                    {title}
                 </motion.span>
             </Titlebar>
         </div>
