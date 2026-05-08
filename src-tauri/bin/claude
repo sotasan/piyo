@@ -1,4 +1,4 @@
 #!/bin/sh
 self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
-exec claude --settings '{"preferredNotifChannel":"ghostty"}' "$@"
+exec claude --settings '{"preferredNotifChannel":"ghostty","hooks":{"Stop":[{"hooks":[{"type":"command","command":"printf '\''\\033]777;notify;Claude;Task complete\\007'\'' > /dev/tty 2>/dev/null"}]}]}}' "$@"
