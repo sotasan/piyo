@@ -3,5 +3,5 @@ function _piyo_prompt_cursor --on-event fish_prompt
 end
 
 function _piyo_preexec_cursor --on-event fish_preexec
-    printf '\e[1 q'
+    printf '\e[2 q'
 end

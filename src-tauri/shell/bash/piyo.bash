@@ -4,4 +4,4 @@ done
 unset _piyo_rc
 
 PROMPT_COMMAND='printf "\e[5 q";'"${PROMPT_COMMAND-}"
-PS0='\e[1 q'"${PS0-}"
+PS0='\e[2 q'"${PS0-}"
