@@ -11,7 +11,9 @@ import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
 const DEFAULT_SIDEBAR_PX = 200;
+const SEPARATOR_PX = 4;
 const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
+const MotionSeparator = motion.create(Separator);
 
 function App() {
     const sidebarRef = usePanelRef();
@@ -34,6 +36,7 @@ function App() {
         if (max <= 0) return 1;
         return Math.max(0, Math.min(1, 1 - v / max));
     });
+    const separatorWidth = useTransform(sizeMV, (v) => Math.min(SEPARATOR_PX, Math.max(0, v)));
 
     useMotionValueEvent(sizeMV, "change", (v) => {
         sidebarRef.current?.resize(`${v}px`);
@@ -48,12 +51,12 @@ function App() {
 
     const toggle = () => {
         if (!collapsed) {
+            setCollapsed(true);
             isAnimatingRef.current = true;
             animate(sizeMV, 0, {
                 ...TWEEN,
                 onComplete: () => {
                     isAnimatingRef.current = false;
-                    setCollapsed(true);
                 },
             });
         } else {
@@ -84,7 +87,10 @@ function App() {
                         <Sidebar />
                     </div>
                 </Panel>
-                {!collapsed && <Separator />}
+                <MotionSeparator
+                    disabled={collapsed}
+                    style={{ width: separatorWidth, flexBasis: separatorWidth }}
+                />
                 <Panel className="relative">
                     <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-lg overflow-hidden border border-border">
                         {terminalRef.current}
