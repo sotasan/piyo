@@ -111,15 +111,7 @@ fn apply_common_env(cmd: &mut CommandBuilder, bin_dir: &Path) {
     cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
     cmd.env("LANG", lang);
-
-    let inherited = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into());
-    let bin = bin_dir.to_string_lossy();
-    let new_path = if inherited.split(':').any(|p| p == bin.as_ref()) {
-        inherited
-    } else {
-        format!("{bin}:{inherited}")
-    };
-    cmd.env("PATH", new_path);
+    cmd.env("PIYO_BIN", bin_dir);
 }
 
 fn build_command(
