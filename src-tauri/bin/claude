@@ -1,8 +1,5 @@
 #!/bin/sh
-# Piyo shim: forces preferredNotifChannel=ghostty so claude emits OSC 777
-# notifications, which Piyo surfaces as macOS banners when unfocused.
-# Strip our own dir from PATH so `exec claude` resolves to the real binary.
-self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PATH=$(printf '%s\n' "$PATH" | awk -v RS=: -v ORS=: -v skip="$self_dir" '$0 != skip' | sed 's/:$//')
-export PATH
+self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+[ -n "$self_dir" ] || exit 1
+PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
 exec claude --settings '{"preferredNotifChannel":"ghostty"}' "$@"
