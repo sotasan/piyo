@@ -1,8 +1,8 @@
 [package]
 name = "piyo"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.0.1"
+description = "The coziest terminal emulator"
+authors = ["Sōta"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -28,8 +28,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"
 tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["rt", "macros"] }
 vte = "0.15"
 whoami = "2"
@@ -39,4 +42,3 @@ window-vibrancy = "0.7"
 block2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
-

@@ -5,8 +5,11 @@
     "windows": ["main"],
     "permissions": [
         "core:default",
-        "core:window:allow-start-dragging",
         "core:window:allow-show",
-        "opener:default"
+        "core:window:allow-start-dragging",
+        "dialog:default",
+        "opener:default",
+        "process:default",
+        "updater:default"
     ]
 }
