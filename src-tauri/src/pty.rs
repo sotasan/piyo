@@ -57,13 +57,14 @@ impl Shell {
     }
 
     fn exec_inner(&self, shell: &str, integration_dir: &Path) -> String {
+        let shell = sh_quote(shell);
         match self {
             Self::Bash => {
                 let rcfile = integration_dir
                     .join("bash")
                     .join(concat!(env!("CARGO_PKG_NAME"), ".bash"));
-                let escaped = rcfile.to_string_lossy().replace('\'', "'\\''");
-                format!("exec {shell} --rcfile '{escaped}'")
+                let rcfile = sh_quote(&rcfile.to_string_lossy());
+                format!("exec {shell} --rcfile {rcfile}")
             }
             _ => format!("exec -l {shell}"),
         }
@@ -91,6 +92,10 @@ impl Shell {
             Self::Bash | Self::Other => {}
         }
     }
+}
+
+fn sh_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 fn hushlogin() -> bool {
@@ -147,7 +152,7 @@ pub async fn pty_spawn(
     rows: u16,
 ) -> CommandResult<()> {
     if state.writer.lock().unwrap().is_some() {
-        return Ok(());
+        return Err(anyhow!("pty already running").into());
     }
 
     let pair = native_pty_system()
