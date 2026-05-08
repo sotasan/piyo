@@ -86,7 +86,7 @@ function App() {
                 </Panel>
                 {!collapsed && <Separator />}
                 <Panel className="relative">
-                    <div className="absolute top-11 right-2 bottom-2 left-2 bg-surface rounded-lg overflow-hidden border border-border">
+                    <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-lg overflow-hidden border border-border">
                         {terminalRef.current}
                     </div>
                 </Panel>
