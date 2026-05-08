@@ -34,7 +34,7 @@ function readThemeColors() {
     const styles = getComputedStyle(document.documentElement);
     const v = (name: string) => styles.getPropertyValue(name).trim();
     return {
-        background: v("--theme-background"),
+        background: v("--theme-surface"),
         foreground: v("--theme-foreground"),
         cursor: v("--theme-cursor"),
     };
@@ -131,7 +131,7 @@ function Terminal() {
         };
     }, []);
 
-    return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;
+    return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-surface" />;
 }
 
 export default Terminal;

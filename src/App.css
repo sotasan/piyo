@@ -2,7 +2,10 @@
 @plugin "@iconify/tailwind4";
 
 @theme inline {
+    --color-accent: var(--theme-accent);
+    --color-accent-dark: color-mix(in oklab, var(--color-accent), black 30%);
     --color-background: var(--theme-background);
+    --color-surface: var(--theme-surface);
     --color-border: var(--theme-border);
     --color-foreground: var(--theme-foreground);
 }

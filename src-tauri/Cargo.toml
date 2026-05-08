@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 anyhow = "1"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 etcetera = "0.11"
+objc2-app-kit = "0.3"
 portable-pty = "0.9"
 rust-embed = "8"
 serde = { version = "1", features = ["derive"] }
