@@ -1,0 +1,53 @@
+name: Release
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: macos-15
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: aarch64-apple-darwin
+
+            - name: Cache Cargo registry & target
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri
+
+            - name: Install frontend dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Resolve release tag
+              id: tag
+              run: |
+                  version=$(awk -F\" '/^version/ {print $2; exit}' src-tauri/Cargo.toml)
+                  echo "value=v${version}" >> "$GITHUB_OUTPUT"
+
+            - name: Build & release
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+              with:
+                  tagName: ${{ steps.tag.outputs.value }}
+                  releaseName: "Piyo ${{ steps.tag.outputs.value }}"
+                  releaseDraft: true
+                  prerelease: false
+                  includeUpdaterJson: true
+                  args: --target aarch64-apple-darwin --bundles app,dmg
