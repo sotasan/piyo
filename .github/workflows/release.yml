@@ -47,7 +47,7 @@ jobs:
               with:
                   tagName: ${{ steps.tag.outputs.value }}
                   releaseName: "Piyo ${{ steps.tag.outputs.value }}"
-                  releaseDraft: true
+                  releaseDraft: false
                   prerelease: false
                   includeUpdaterJson: true
                   args: --target aarch64-apple-darwin --bundles app,dmg
