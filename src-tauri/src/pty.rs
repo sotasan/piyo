@@ -7,6 +7,8 @@ use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
+use crate::osc::OscPerformer;
+
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
 
@@ -174,12 +176,16 @@ pub async fn pty_spawn(
     *state.writer.lock().unwrap() = Some(writer);
     *state.master.lock().unwrap() = Some(pair.master);
 
+    let app_for_osc = app.clone();
     tokio::task::spawn_blocking(move || {
+        let mut parser = vte::Parser::new();
+        let mut performer = OscPerformer::new(app_for_osc);
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    parser.advance(&mut performer, &buf[..n]);
                     if events.send(PtyEvent::Data(buf[..n].to_vec())).is_err() {
                         break;
                     }
