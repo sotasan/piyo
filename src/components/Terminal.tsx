@@ -59,6 +59,7 @@ function Terminal() {
                 fontFamily: fontStack(config.font_family),
                 theme: readThemeColors(),
                 cursorBlink: true,
+                quirks: { allowSetCursorBlink: true },
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
