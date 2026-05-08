@@ -99,19 +99,29 @@ fn hushlogin() -> bool {
         .unwrap_or(false)
 }
 
-fn apply_common_env(cmd: &mut CommandBuilder) {
+fn apply_common_env(cmd: &mut CommandBuilder, bin_dir: &Path) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", env!("CARGO_PKG_NAME"));
     cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
     cmd.env("LANG", lang);
+
+    let inherited = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into());
+    let bin = bin_dir.to_string_lossy();
+    let new_path = if inherited.split(':').any(|p| p == bin.as_ref()) {
+        inherited
+    } else {
+        format!("{bin}:{inherited}")
+    };
+    cmd.env("PATH", new_path);
 }
 
 fn build_command(
     shell_path: &str,
     shell: &Shell,
     integration_dir: &Path,
+    bin_dir: &Path,
 ) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
     let flags = if hushlogin() { "-flpq" } else { "-flp" };
@@ -123,7 +133,7 @@ fn build_command(
     cmd.arg("--norc");
     cmd.arg("-c");
     cmd.arg(shell.exec_inner(shell_path, integration_dir));
-    apply_common_env(&mut cmd);
+    apply_common_env(&mut cmd, bin_dir);
     shell.apply_env(&mut cmd, integration_dir);
     Ok(cmd)
 }
@@ -151,12 +161,13 @@ pub async fn pty_spawn(
 
     let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
     let shell = Shell::detect(&shell_path);
-    let integration_dir = app
+    let resource_dir = app
         .path()
         .resource_dir()
-        .context("failed to resolve resource dir")?
-        .join("shell");
-    let cmd = build_command(&shell_path, &shell, &integration_dir)?;
+        .context("failed to resolve resource dir")?;
+    let integration_dir = resource_dir.join("shell");
+    let bin_dir = resource_dir.join("bin");
+    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir)?;
 
     let mut child = pair
         .slave
