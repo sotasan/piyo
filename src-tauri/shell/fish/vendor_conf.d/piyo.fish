@@ -5,3 +5,7 @@ end
 function _piyo_preexec_cursor --on-event fish_preexec
     printf '\e[2 q'
 end
+
+function claude --wraps claude
+    command claude --settings '{"preferredNotifChannel":"ghostty"}' $argv
+end
