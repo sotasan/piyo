@@ -61,7 +61,7 @@ impl Perform for OscPerformer {
                 }
             }
             b"9" => {
-                if params.get(1).copied() == Some(b"4".as_slice()) {
+                if params.get(1) == Some(&b"4".as_slice()) {
                     return;
                 }
                 if let Some(msg) = join_payload(params, 1) {
@@ -69,7 +69,7 @@ impl Perform for OscPerformer {
                 }
             }
             b"777" => {
-                if params.get(1).copied() != Some(b"notify".as_slice()) {
+                if params.get(1) != Some(&b"notify".as_slice()) {
                     return;
                 }
                 let title = params
