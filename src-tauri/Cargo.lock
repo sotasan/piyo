@@ -2583,10 +2583,12 @@ name = "piyo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "block2",
  "cc",
  "config",
  "etcetera",
  "objc2-app-kit",
+ "objc2-foundation",
  "portable-pty",
  "rust-embed",
  "serde",

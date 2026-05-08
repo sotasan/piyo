@@ -32,6 +32,9 @@ pub fn run() {
             )
             .expect("failed to apply window vibrancy");
 
+            #[cfg(target_os = "macos")]
+            accent::install_observer(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -1,26 +1,54 @@
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSColor, NSColorSpace};
+mod platform {
+    use std::ptr::NonNull;
 
-#[cfg(target_os = "macos")]
-fn read_accent_hex() -> String {
-    let color = NSColor::controlAccentColor();
-    match color.colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()) {
-        Some(rgb) => {
-            let r = rgb.redComponent();
-            let g = rgb.greenComponent();
-            let b = rgb.blueComponent();
-            format!(
-                "#{:02x}{:02x}{:02x}",
-                (r.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (g.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (b.clamp(0.0, 1.0) * 255.0).round() as u8,
-            )
+    use block2::RcBlock;
+    use objc2_app_kit::{NSColor, NSColorSpace, NSSystemColorsDidChangeNotification};
+    use objc2_foundation::{NSNotification, NSNotificationCenter, NSUserDefaults, ns_string};
+    use tauri::{AppHandle, Emitter};
+
+    const ACCENT_EVENT: &str = "accent:changed";
+    const FALLBACK: &str = "transparent";
+
+    pub fn read_accent_hex() -> String {
+        let defaults = NSUserDefaults::standardUserDefaults();
+        if defaults
+            .objectForKey(ns_string!("AppleAccentColor"))
+            .is_none()
+        {
+            return FALLBACK.into();
         }
-        None => "transparent".into(),
+        match NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()) {
+            Some(rgb) => {
+                let r = (rgb.redComponent().clamp(0.0, 1.0) * 255.0).round() as u8;
+                let g = (rgb.greenComponent().clamp(0.0, 1.0) * 255.0).round() as u8;
+                let b = (rgb.blueComponent().clamp(0.0, 1.0) * 255.0).round() as u8;
+                format!("#{r:02x}{g:02x}{b:02x}")
+            }
+            None => FALLBACK.into(),
+        }
+    }
+
+    pub fn install_observer(app: AppHandle) {
+        let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+            app.emit(ACCENT_EVENT, read_accent_hex()).ok();
+        });
+        let center = NSNotificationCenter::defaultCenter();
+        unsafe {
+            let _ = center.addObserverForName_object_queue_usingBlock(
+                Some(NSSystemColorsDidChangeNotification),
+                None,
+                None,
+                &block,
+            );
+        }
     }
 }
 
+#[cfg(target_os = "macos")]
+pub use platform::install_observer;
+
 #[tauri::command]
 pub fn get_accent_color() -> String {
-    read_accent_hex()
+    platform::read_accent_hex()
 }
