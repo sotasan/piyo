@@ -16,7 +16,7 @@ const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
 function App() {
     const sidebarRef = usePanelRef();
     const [collapsed, setCollapsed] = useState(true);
-    const [title, setTitle] = useState("Piyo");
+    const [title, setTitle] = useState("");
     const sizeMV = useMotionValue(0);
     const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
     const isAnimatingRef = useRef(false);
