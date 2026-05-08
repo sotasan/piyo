@@ -13,11 +13,12 @@
 - ⚡ GPU-accelerated rendering
 - 🪟 Native macOS vibrancy and transparency
 - 🎨 Customizable themes with user-defined CSS
-- 🖼️ Sixel and iTerm2 inline image protocols
+- 🖼️ Inline images (Sixel, iTerm2)
 - 🔗 Clickable hyperlinks
 - 📊 Progress reporting (ConEmu OSC 9;4)
-- 🔔 Desktop notifications (OSC 9)
-- 🐚 Bash, Zsh, and Fish support
+- 🔔 Desktop notifications (OSC 9, 777)
+- 🤖 Claude Code task-finish banners
+- 🐚 Bash, Zsh, and Fish shell integration
 - 🌈 Full Unicode and emoji width handling
 - 🎯 Live macOS accent color sync
 
