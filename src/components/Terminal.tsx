@@ -58,7 +58,6 @@ function Terminal() {
                 fontSize: config.font_size,
                 fontFamily: fontStack(config.font_family),
                 theme: readThemeColors(),
-                cursorBlink: true,
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
