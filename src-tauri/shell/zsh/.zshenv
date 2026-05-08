@@ -9,7 +9,7 @@ fi
 
 if [[ -o interactive ]]; then
     autoload -Uz add-zsh-hook
-    _piyo_cursor_bar()   { print -n '\e[5 q' }
+    _piyo_cursor_bar()   { print -n '\e[5 q\e[?12l\e[?12h' }
     _piyo_cursor_block() { print -n '\e[2 q' }
     add-zsh-hook precmd  _piyo_cursor_bar
     add-zsh-hook preexec _piyo_cursor_block
