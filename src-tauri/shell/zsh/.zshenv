@@ -8,16 +8,9 @@ fi
 [[ -r "${ZDOTDIR-$HOME}/.zshenv" ]] && source "${ZDOTDIR-$HOME}/.zshenv"
 
 if [[ -o interactive ]]; then
-    _piyo_cursor() {
-        case ${KEYMAP-} in
-            vicmd|visual) print -n '\e[2 q' ;;
-            *)            print -n '\e[6 q' ;;
-        esac
-    }
-    _piyo_cursor_reset() { print -n '\e[0 q' }
-
-    autoload -Uz add-zle-hook-widget
-    add-zle-hook-widget line-init     _piyo_cursor       2>/dev/null
-    add-zle-hook-widget line-finish   _piyo_cursor_reset 2>/dev/null
-    add-zle-hook-widget keymap-select _piyo_cursor       2>/dev/null
+    autoload -Uz add-zsh-hook
+    _piyo_cursor_bar()   { print -n '\e[6 q' }
+    _piyo_cursor_block() { print -n '\e[2 q' }
+    add-zsh-hook precmd  _piyo_cursor_bar
+    add-zsh-hook preexec _piyo_cursor_block
 fi
