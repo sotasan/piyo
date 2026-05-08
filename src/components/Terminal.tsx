@@ -111,6 +111,7 @@ function Terminal() {
                 term.loadAddon(new WebglAddon());
             } catch {}
             fit.fit();
+            term.focus();
             ro.observe(container);
 
             const events = new Channel<PtyEvent>();
