@@ -36,6 +36,7 @@ impl OscPerformer {
     }
 
     fn handle_claude_stop(&self, payload: &str) {
+        let payload = payload.trim();
         if payload.is_empty() || self.window_focused() {
             return;
         }
