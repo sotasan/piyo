@@ -1,4 +1,8 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["eslint", "oxc", "react", "typescript", "unicorn"]
+    "plugins": ["eslint", "oxc", "react", "typescript", "unicorn"],
+    "jsPlugins": ["eslint-plugin-react-compiler"],
+    "rules": {
+        "react-compiler/react-compiler": "error"
+    }
 }
