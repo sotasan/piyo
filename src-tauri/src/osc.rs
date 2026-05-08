@@ -54,7 +54,7 @@ impl Perform for OscPerformer {
                     .get(2)
                     .and_then(|t| std::str::from_utf8(t).ok())
                     .filter(|t| !t.is_empty())
-                    .unwrap_or("Claude");
+                    .unwrap_or("Piyo");
                 let body = if params.len() > 3 {
                     let joined = params[3..].join(b";".as_slice());
                     String::from_utf8(joined).unwrap_or_default()
