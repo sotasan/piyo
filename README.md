@@ -18,7 +18,7 @@
 - 📊 Progress reporting (ConEmu OSC 9;4)
 - 🔔 Desktop notifications (OSC 9, 777)
 - 🤖 Claude Code task-finish banners
-- 🐚 Bash, Zsh, and Fish shell integration
+- 🐚 Bash, Zsh, Fish, and Nushell shell integration
 - 🌈 Full Unicode and emoji width handling
 - 🎯 Live macOS accent color sync
 
