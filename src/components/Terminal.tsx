@@ -63,6 +63,13 @@ function Terminal() {
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
+            term.attachCustomKeyEventHandler((event) => {
+                if (event.type === "keydown" && event.metaKey && event.key === "k") {
+                    term.clear();
+                    return false;
+                }
+                return true;
+            });
             const fit = new FitAddon();
             const webFonts = new WebFontsAddon();
             for (const addon of [
