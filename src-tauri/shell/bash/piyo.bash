@@ -3,5 +3,5 @@ for _piyo_rc in /etc/profile "$HOME/.bash_profile" "$HOME/.bashrc"; do
 done
 unset _piyo_rc
 
-PROMPT_COMMAND='printf "\e[6 q";'"${PROMPT_COMMAND-}"
-PS0='\e[2 q'"${PS0-}"
+PROMPT_COMMAND='printf "\e[5 q";'"${PROMPT_COMMAND-}"
+PS0='\e[1 q'"${PS0-}"
