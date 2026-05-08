@@ -6,7 +6,7 @@ exec claude --settings '{
         "Stop": [{
             "hooks": [{
                 "type": "command",
-                "command": "{ printf \"\\033]74961;\"; cat; printf \"\\007\"; } > /dev/tty 2>/dev/null"
+                "command": "{ printf \"\\033]7496;claude;stop;\"; cat; printf \"\\007\"; } > /dev/tty 2>/dev/null"
             }]
         }]
     }
