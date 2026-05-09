@@ -1,11 +1,11 @@
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result, anyhow};
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use anyhow::{Context, Result};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, ResourceId};
 
 use crate::osc::OscPerformer;
 
@@ -33,11 +33,13 @@ pub enum PtyEvent {
     Exit,
 }
 
-#[derive(Default)]
-pub struct PtyState {
-    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
+pub struct PtyHandle {
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
+    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
 }
+
+impl tauri::Resource for PtyHandle {}
 
 enum Shell {
     Bash,
@@ -121,6 +123,7 @@ fn build_command(
     shell: &Shell,
     integration_dir: &Path,
     bin_dir: &Path,
+    cwd: Option<&Path>,
 ) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
     let flags = if hushlogin() { "-flpq" } else { "-flp" };
@@ -134,21 +137,20 @@ fn build_command(
     cmd.arg(shell.exec_inner(shell_path, integration_dir));
     apply_common_env(&mut cmd, bin_dir);
     shell.apply_env(&mut cmd, integration_dir);
+    if let Some(dir) = cwd {
+        cmd.cwd(dir);
+    }
     Ok(cmd)
 }
 
 #[tauri::command]
 pub async fn pty_spawn(
     app: AppHandle,
-    state: State<'_, PtyState>,
     events: Channel<PtyEvent>,
     cols: u16,
     rows: u16,
-) -> CommandResult<()> {
-    if state.writer.lock().unwrap().is_some() {
-        return Err(anyhow!("pty already running").into());
-    }
-
+    cwd: Option<String>,
+) -> CommandResult<ResourceId> {
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,
@@ -166,9 +168,10 @@ pub async fn pty_spawn(
         .context("failed to resolve resource dir")?;
     let integration_dir = resource_dir.join("shell");
     let bin_dir = resource_dir.join("bin");
-    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir)?;
+    let cwd_path = cwd.as_ref().map(Path::new).filter(|p| p.is_dir());
+    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir, cwd_path)?;
 
-    let mut child = pair
+    let child = pair
         .slave
         .spawn_command(cmd)
         .context("failed to spawn shell")?;
@@ -183,13 +186,21 @@ pub async fn pty_spawn(
         .take_writer()
         .context("failed to take pty writer")?;
 
-    *state.writer.lock().unwrap() = Some(writer);
-    *state.master.lock().unwrap() = Some(pair.master);
+    let child = Arc::new(Mutex::new(child));
+    let child_for_reader = child.clone();
+
+    let handle = PtyHandle {
+        master: Mutex::new(pair.master),
+        writer: Mutex::new(writer),
+        child,
+    };
+
+    let rid = app.resources_table().add(handle);
 
     let app_for_osc = app.clone();
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
-        let mut performer = OscPerformer::new(app_for_osc);
+        let mut performer = OscPerformer::new(app_for_osc.clone(), rid);
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
@@ -203,17 +214,21 @@ pub async fn pty_spawn(
                 Err(_) => break,
             }
         }
-        let _ = child.wait();
+        let _ = child_for_reader.lock().unwrap().wait();
         let _ = events.send(PtyEvent::Exit);
+        let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
     });
 
-    Ok(())
+    Ok(rid)
 }
 
 #[tauri::command]
-pub fn pty_write(state: State<'_, PtyState>, data: String) -> CommandResult<()> {
-    let mut guard = state.writer.lock().unwrap();
-    let writer = guard.as_mut().ok_or_else(|| anyhow!("pty not spawned"))?;
+pub fn pty_write(app: AppHandle, rid: ResourceId, data: String) -> CommandResult<()> {
+    let handle = app
+        .resources_table()
+        .get::<PtyHandle>(rid)
+        .context("unknown pty rid")?;
+    let mut writer = handle.writer.lock().unwrap();
     writer
         .write_all(data.as_bytes())
         .context("failed to write to pty")?;
@@ -222,10 +237,15 @@ pub fn pty_write(state: State<'_, PtyState>, data: String) -> CommandResult<()> 
 }
 
 #[tauri::command]
-pub fn pty_resize(state: State<'_, PtyState>, cols: u16, rows: u16) -> CommandResult<()> {
-    let guard = state.master.lock().unwrap();
-    let master = guard.as_ref().ok_or_else(|| anyhow!("pty not spawned"))?;
-    master
+pub fn pty_resize(app: AppHandle, rid: ResourceId, cols: u16, rows: u16) -> CommandResult<()> {
+    let handle = app
+        .resources_table()
+        .get::<PtyHandle>(rid)
+        .context("unknown pty rid")?;
+    handle
+        .master
+        .lock()
+        .unwrap()
         .resize(PtySize {
             rows,
             cols,
@@ -233,5 +253,17 @@ pub fn pty_resize(state: State<'_, PtyState>, cols: u16, rows: u16) -> CommandRe
             pixel_height: 0,
         })
         .context("failed to resize pty")?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn pty_close(app: AppHandle, rid: ResourceId) -> CommandResult<()> {
+    let handle = match app.resources_table().get::<PtyHandle>(rid) {
+        Ok(h) => h,
+        Err(_) => return Ok(()), // already gone — race with natural exit
+    };
+    let _ = handle.child.lock().unwrap().kill();
+    drop(handle); // release the lookup-Arc before mutating the table
+    let _ = app.resources_table().close(rid);
     Ok(())
 }

@@ -63,10 +63,11 @@ function Terminal() {
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
+            let rid: number | null = null;
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
                     term.write("\x1b[3J");
-                    invoke("pty_write", { data: "\x0c" });
+                    if (rid !== null) invoke("pty_write", { rid, data: "\x0c" });
                     return false;
                 }
                 return true;
@@ -120,10 +121,18 @@ function Terminal() {
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
                 else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
             };
-            term.onData((data) => invoke("pty_write", { data }));
-            term.onResize(({ cols, rows }) => invoke("pty_resize", { cols, rows }));
 
-            await invoke("pty_spawn", { events, cols: term.cols, rows: term.rows });
+            rid = await invoke<number>("pty_spawn", {
+                events,
+                cols: term.cols,
+                rows: term.rows,
+                cwd: null,
+            });
+            if (ac.signal.aborted) return;
+            const ptyRid = rid;
+
+            term.onData((data) => invoke("pty_write", { rid: ptyRid, data }));
+            term.onResize(({ cols, rows }) => invoke("pty_resize", { rid: ptyRid, cols, rows }));
         })();
 
         return () => {

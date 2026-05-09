@@ -1,14 +1,15 @@
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, ResourceId};
 use tauri_plugin_notification::NotificationExt;
 use vte::Perform;
 
 pub struct OscPerformer {
     app: AppHandle,
+    rid: ResourceId,
 }
 
 impl OscPerformer {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app }
+    pub fn new(app: AppHandle, rid: ResourceId) -> Self {
+        Self { app, rid }
     }
 
     fn notify(&self, title: &str, body: &str) {
@@ -57,7 +58,10 @@ impl Perform for OscPerformer {
         match code {
             b"0" | b"2" => {
                 if let Some(title) = join_payload(params, 1) {
-                    let _ = self.app.emit("pty:title", &title);
+                    let _ = self.app.emit(
+                        "pty:title",
+                        &serde_json::json!({ "rid": self.rid, "title": title }),
+                    );
                 }
             }
             b"9" => {
