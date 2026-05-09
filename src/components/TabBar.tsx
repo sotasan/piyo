@@ -6,12 +6,7 @@ import {
     useSensors,
     type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-    SortableContext,
-    arrayMove,
-    horizontalListSortingStrategy,
-    useSortable,
-} from "@dnd-kit/sortable";
+import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
 type TabSummary = { id: number; title: string };
@@ -121,5 +116,4 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     );
 }
 
-export { arrayMove };
 export default TabBar;
