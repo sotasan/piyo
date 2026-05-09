@@ -240,6 +240,14 @@ function App() {
                             activeId={activeId}
                             onActivate={setActiveId}
                             onClose={closeTabById}
+                            onReorder={(oldIndex, newIndex) => {
+                                setTabs((prev) => {
+                                    const result = [...prev];
+                                    const [moved] = result.splice(oldIndex, 1);
+                                    result.splice(newIndex, 0, moved);
+                                    return result;
+                                });
+                            }}
                         />
                     </motion.div>
                 ) : (
