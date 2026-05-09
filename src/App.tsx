@@ -63,24 +63,22 @@ function App() {
     // Exit routing.
     useEffect(() => {
         const unlisten = listen<{ rid: number }>("pty:exit", (e) => {
+            const closingRid = e.payload.rid;
             setTabs((prev) => {
-                const next = prev.filter((t) => t.id !== e.payload.rid);
+                const next = prev.filter((t) => t.id !== closingRid);
                 if (next.length === 0) {
-                    getCurrentWindow().close();
+                    queueMicrotask(() => getCurrentWindow().close());
                 }
+                setActiveId((current) =>
+                    current === closingRid ? (next[0]?.id ?? null) : current,
+                );
                 return next;
-            });
-            setActiveId((prev) => {
-                if (prev !== e.payload.rid) return prev;
-                // pick neighbor
-                const remaining = tabs.filter((t) => t.id !== e.payload.rid);
-                return remaining[0]?.id ?? null;
             });
         });
         return () => {
             unlisten.then((u) => u());
         };
-    }, [tabs]);
+    }, []);
 
     const titleOpacity = useTransform(sizeMV, (v) => {
         const max = lastExpandedRef.current;
