@@ -132,13 +132,18 @@ function App() {
             const closingRid = e.payload.rid;
             cwdRef.current.delete(closingRid);
             setTabs((prev) => {
+                const oldIdx = prev.findIndex((t) => t.id === closingRid);
                 const next = prev.filter((t) => t.id !== closingRid);
                 if (next.length === 0) {
                     queueMicrotask(() => getCurrentWindow().close());
                 }
-                setActiveId((current) =>
-                    current === closingRid ? (next[0]?.id ?? null) : current,
-                );
+                setActiveId((current) => {
+                    if (current !== closingRid) return current;
+                    // Pick the tab originally to the right of the closed one;
+                    // fall back to the new rightmost (i.e. the tab originally
+                    // to the left when the closed tab was rightmost).
+                    return prev[oldIdx + 1]?.id ?? next[next.length - 1]?.id ?? null;
+                });
                 return next;
             });
         });
