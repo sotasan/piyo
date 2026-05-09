@@ -9,6 +9,7 @@ import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import Terminal, { type PtyEvent } from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
+import { installMenu, type MenuState } from "@/menu";
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
@@ -29,6 +30,16 @@ function App() {
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [activeId, setActiveId] = useState<number | null>(null);
     const dimsRef = useRef({ cols: 80, rows: 24 });
+    const stateRef = useRef<MenuState>({ tabs: [], activeId: null });
+    useEffect(() => {
+        stateRef.current = { tabs: tabs.map(({ id, title }) => ({ id, title })), activeId };
+    });
+
+    const refreshMenuRef = useRef<(() => Promise<void>) | null>(null);
+
+    useEffect(() => {
+        refreshMenuRef.current?.();
+    }, [tabs, activeId]);
     const sizeMV = useMotionValue(0);
     const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
     const isAnimatingRef = useRef(false);
@@ -43,10 +54,51 @@ function App() {
         return rid;
     }, []);
 
-    // First tab on app launch.
+    const closeTabById = useCallback((rid: number) => {
+        invoke("pty_close", { rid }).catch((e) => console.error("pty_close failed", e));
+    }, []);
+
+    // Install the menu, then spawn the first tab on app launch.
     useEffect(() => {
-        spawnTab(null).catch((e) => console.error("initial spawn failed", e));
-    }, [spawnTab]);
+        let cancelled = false;
+        (async () => {
+            const refresh = await installMenu(() => stateRef.current, {
+                newTab: () => {
+                    spawnTab(null).catch((e) => console.error("spawn failed", e));
+                },
+                closeActiveTab: () => {
+                    const id = stateRef.current.activeId;
+                    if (id !== null) closeTabById(id);
+                },
+                selectPrevTab: () => {
+                    const { tabs, activeId } = stateRef.current;
+                    if (tabs.length < 2 || activeId === null) return;
+                    const idx = tabs.findIndex((t) => t.id === activeId);
+                    const prev = tabs[(idx - 1 + tabs.length) % tabs.length];
+                    setActiveId(prev.id);
+                },
+                selectNextTab: () => {
+                    const { tabs, activeId } = stateRef.current;
+                    if (tabs.length < 2 || activeId === null) return;
+                    const idx = tabs.findIndex((t) => t.id === activeId);
+                    const next = tabs[(idx + 1) % tabs.length];
+                    setActiveId(next.id);
+                },
+                showTabAtIndex: (index: number) => {
+                    const { tabs } = stateRef.current;
+                    const t = tabs[Math.min(index, tabs.length - 1)];
+                    if (t) setActiveId(t.id);
+                },
+            });
+            if (cancelled) return;
+            refreshMenuRef.current = refresh;
+            // Spawn the first tab.
+            await spawnTab(null);
+        })().catch((e) => console.error("startup failed", e));
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // Title routing.
     useEffect(() => {
