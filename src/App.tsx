@@ -25,7 +25,9 @@ function App() {
     const terminalRef = useRef(<Terminal />);
 
     useEffect(() => {
-        const unlisten = listen<string>("pty:title", (e) => setTitle(e.payload));
+        const unlisten = listen<{ rid: number; title: string }>("pty:title", (e) =>
+            setTitle(e.payload.title),
+        );
         return () => {
             unlisten.then((u) => u());
         };

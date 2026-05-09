@@ -36,7 +36,7 @@ pub enum PtyEvent {
 pub struct PtyHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
-    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    child: Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>,
 }
 
 impl tauri::Resource for PtyHandle {}
@@ -186,7 +186,7 @@ pub async fn pty_spawn(
         .take_writer()
         .context("failed to take pty writer")?;
 
-    let child = Arc::new(Mutex::new(child));
+    let child = Arc::new(Mutex::new(Some(child)));
     let child_for_reader = child.clone();
 
     let handle = PtyHandle {
@@ -214,7 +214,10 @@ pub async fn pty_spawn(
                 Err(_) => break,
             }
         }
-        let _ = child_for_reader.lock().unwrap().wait();
+        let taken = child_for_reader.lock().unwrap().take();
+        if let Some(mut c) = taken {
+            let _ = c.wait();
+        }
         let _ = events.send(PtyEvent::Exit);
         let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
     });
@@ -262,7 +265,9 @@ pub fn pty_close(app: AppHandle, rid: ResourceId) -> CommandResult<()> {
         Ok(h) => h,
         Err(_) => return Ok(()), // already gone — race with natural exit
     };
-    let _ = handle.child.lock().unwrap().kill();
+    if let Some(child) = handle.child.lock().unwrap().as_mut() {
+        let _ = child.kill();
+    }
     drop(handle); // release the lookup-Arc before mutating the table
     let _ = app.resources_table().close(rid);
     Ok(())
