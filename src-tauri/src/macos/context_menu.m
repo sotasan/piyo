@@ -18,7 +18,7 @@ static void replacement(id self, SEL _cmd, NSMenu *menu, NSEvent *event) {
     }
 }
 
-void piyo_install_context_menu_filter(void) {
+void piyo_install_context_menu(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         Class cls = NSClassFromString(@"WKWebView");

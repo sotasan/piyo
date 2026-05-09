@@ -1,6 +1,6 @@
 mod accent;
 mod config;
-mod context_menu;
+mod macos;
 mod osc;
 mod pty;
 mod theme;
@@ -24,19 +24,23 @@ pub fn run() {
         .setup(|app| {
             app.manage(PtyState::default());
             app.manage(config::load());
-            context_menu::install();
 
             #[cfg(target_os = "macos")]
-            apply_vibrancy(
-                app.get_webview_window("main").unwrap(),
-                NSVisualEffectMaterial::Sidebar,
-                Some(NSVisualEffectState::Active),
-                None,
-            )
-            .expect("failed to apply window vibrancy");
-
-            #[cfg(target_os = "macos")]
-            accent::install_observer(app.handle().clone());
+            {
+                let main = app
+                    .get_webview_window("main")
+                    .expect("main window missing in tauri.conf.json");
+                macos::context_menu::install();
+                apply_vibrancy(
+                    &main,
+                    NSVisualEffectMaterial::Sidebar,
+                    Some(NSVisualEffectState::Active),
+                    None,
+                )
+                .expect("failed to apply window vibrancy");
+                macos::refresh_rate::install(&main);
+                accent::install_observer(app.handle().clone());
+            }
 
             Ok(())
         })
