@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::Path;
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
@@ -33,10 +35,16 @@ pub enum PtyEvent {
     Exit,
 }
 
+pub struct PtyInstance {
+    master: Box<dyn MasterPty + Send>,
+    writer: Box<dyn Write + Send>,
+    cwd: Arc<Mutex<Option<PathBuf>>>,
+}
+
 #[derive(Default)]
 pub struct PtyState {
-    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    next_id: AtomicU64,
+    instances: Mutex<HashMap<u64, PtyInstance>>,
 }
 
 enum Shell {
@@ -121,6 +129,7 @@ fn build_command(
     shell: &Shell,
     integration_dir: &Path,
     bin_dir: &Path,
+    cwd: &Path,
 ) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
     let flags = if hushlogin() { "-flpq" } else { "-flp" };
@@ -132,6 +141,7 @@ fn build_command(
     cmd.arg("--norc");
     cmd.arg("-c");
     cmd.arg(shell.exec_inner(shell_path, integration_dir));
+    cmd.cwd(cwd);
     apply_common_env(&mut cmd, bin_dir);
     shell.apply_env(&mut cmd, integration_dir);
     Ok(cmd)
@@ -142,12 +152,11 @@ pub async fn pty_spawn(
     app: AppHandle,
     state: State<'_, PtyState>,
     events: Channel<PtyEvent>,
+    cwd: Option<String>,
     cols: u16,
     rows: u16,
-) -> CommandResult<()> {
-    if state.writer.lock().unwrap().is_some() {
-        return Err(anyhow!("pty already running").into());
-    }
+) -> CommandResult<u64> {
+    let id = state.next_id.fetch_add(1, Ordering::Relaxed) + 1;
 
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -158,6 +167,11 @@ pub async fn pty_spawn(
         })
         .context("failed to open pty")?;
 
+    let initial_cwd = match cwd {
+        Some(p) => PathBuf::from(p),
+        None => etcetera::home_dir().context("failed to resolve home dir")?,
+    };
+
     let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
     let shell = Shell::detect(&shell_path);
     let resource_dir = app
@@ -166,7 +180,13 @@ pub async fn pty_spawn(
         .context("failed to resolve resource dir")?;
     let integration_dir = resource_dir.join("shell");
     let bin_dir = resource_dir.join("bin");
-    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir)?;
+    let cmd = build_command(
+        &shell_path,
+        &shell,
+        &integration_dir,
+        &bin_dir,
+        &initial_cwd,
+    )?;
 
     let mut child = pair
         .slave
@@ -183,13 +203,21 @@ pub async fn pty_spawn(
         .take_writer()
         .context("failed to take pty writer")?;
 
-    *state.writer.lock().unwrap() = Some(writer);
-    *state.master.lock().unwrap() = Some(pair.master);
+    let cwd_arc = Arc::new(Mutex::new(Some(initial_cwd)));
+
+    state.instances.lock().unwrap().insert(
+        id,
+        PtyInstance {
+            master: pair.master,
+            writer,
+            cwd: cwd_arc.clone(),
+        },
+    );
 
     let app_for_osc = app.clone();
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
-        let mut performer = OscPerformer::new(app_for_osc);
+        let mut performer = OscPerformer::new(app_for_osc, id, cwd_arc);
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
@@ -207,25 +235,29 @@ pub async fn pty_spawn(
         let _ = events.send(PtyEvent::Exit);
     });
 
-    Ok(())
+    Ok(id)
 }
 
 #[tauri::command]
-pub fn pty_write(state: State<'_, PtyState>, data: String) -> CommandResult<()> {
-    let mut guard = state.writer.lock().unwrap();
-    let writer = guard.as_mut().ok_or_else(|| anyhow!("pty not spawned"))?;
-    writer
+pub fn pty_write(state: State<'_, PtyState>, id: u64, data: String) -> CommandResult<()> {
+    let mut guard = state.instances.lock().unwrap();
+    let inst = guard
+        .get_mut(&id)
+        .ok_or_else(|| anyhow!("pty {id} not found"))?;
+    inst.writer
         .write_all(data.as_bytes())
         .context("failed to write to pty")?;
-    writer.flush().context("failed to flush pty")?;
+    inst.writer.flush().context("failed to flush pty")?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn pty_resize(state: State<'_, PtyState>, cols: u16, rows: u16) -> CommandResult<()> {
-    let guard = state.master.lock().unwrap();
-    let master = guard.as_ref().ok_or_else(|| anyhow!("pty not spawned"))?;
-    master
+pub fn pty_resize(state: State<'_, PtyState>, id: u64, cols: u16, rows: u16) -> CommandResult<()> {
+    let guard = state.instances.lock().unwrap();
+    let inst = guard
+        .get(&id)
+        .ok_or_else(|| anyhow!("pty {id} not found"))?;
+    inst.master
         .resize(PtySize {
             rows,
             cols,
@@ -234,4 +266,20 @@ pub fn pty_resize(state: State<'_, PtyState>, cols: u16, rows: u16) -> CommandRe
         })
         .context("failed to resize pty")?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn pty_close(state: State<'_, PtyState>, id: u64) -> CommandResult<()> {
+    state.instances.lock().unwrap().remove(&id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn pty_get_cwd(state: State<'_, PtyState>, id: u64) -> CommandResult<Option<String>> {
+    let guard = state.instances.lock().unwrap();
+    let Some(inst) = guard.get(&id) else {
+        return Ok(None);
+    };
+    let cwd = inst.cwd.lock().unwrap().clone();
+    Ok(cwd.map(|p| p.to_string_lossy().into_owned()))
 }

@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
-import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
+import WorkspaceView from "@/components/WorkspaceView";
+import { type Workspace, newWorkspace } from "@/workspaces";
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
@@ -18,18 +19,96 @@ const MotionSeparator = motion.create(Separator);
 function App() {
     const sidebarRef = usePanelRef();
     const [collapsed, setCollapsed] = useState(true);
-    const [title, setTitle] = useState("");
+    const [workspaces, setWorkspaces] = useState<Workspace[]>(() => [newWorkspace()]);
+    const [activeId, setActiveId] = useState<number>(workspaces[0].id);
+    const [titles, setTitles] = useState<Record<number, string>>({});
+    // cwds are tracked passively for future tab-spawn use; stored but unused in v1.
+    const [, setCwds] = useState<Record<number, string>>({});
     const sizeMV = useMotionValue(0);
     const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
     const isAnimatingRef = useRef(false);
-    const terminalRef = useRef(<Terminal />);
 
     useEffect(() => {
-        const unlisten = listen<string>("pty:title", (e) => setTitle(e.payload));
+        const u1 = listen<{ id: number; title: string }>("pty:title", (e) =>
+            setTitles((p) => ({ ...p, [e.payload.id]: e.payload.title })),
+        );
+        const u2 = listen<{ id: number; cwd: string }>("pty:cwd", (e) =>
+            setCwds((p) => ({ ...p, [e.payload.id]: e.payload.cwd })),
+        );
         return () => {
-            unlisten.then((u) => u());
+            u1.then((u) => u());
+            u2.then((u) => u());
         };
     }, []);
+
+    const addWorkspace = useCallback(() => {
+        const ws = newWorkspace();
+        setWorkspaces((prev) => [...prev, ws]);
+        setActiveId(ws.id);
+    }, []);
+
+    const closeWorkspace = useCallback((id: number) => {
+        setWorkspaces((prev) => {
+            if (prev.length <= 1) return prev;
+            const idx = prev.findIndex((w) => w.id === id);
+            if (idx < 0) return prev;
+            const next = prev.filter((w) => w.id !== id);
+            setActiveId((current) => (current === id ? next[Math.max(0, idx - 1)].id : current));
+            return next;
+        });
+    }, []);
+
+    const handleTabSpawned = useCallback((workspaceId: number, tabId: number, ptyId: number) => {
+        setWorkspaces((prev) =>
+            prev.map((w) =>
+                w.id !== workspaceId
+                    ? w
+                    : {
+                          ...w,
+                          tabs: w.tabs.map((t) => (t.id === tabId ? { ...t, ptyId } : t)),
+                      },
+            ),
+        );
+    }, []);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!e.metaKey || e.altKey || e.ctrlKey) return;
+            const key = e.key.toLowerCase();
+            if (!e.shiftKey && key === "n") {
+                e.preventDefault();
+                addWorkspace();
+                return;
+            }
+            if (e.shiftKey && key === "w") {
+                e.preventDefault();
+                closeWorkspace(activeId);
+                return;
+            }
+            if (e.shiftKey && /^[1-9]$/.test(e.key)) {
+                e.preventDefault();
+                const n = Number(e.key) - 1;
+                if (workspaces[n]) setActiveId(workspaces[n].id);
+                return;
+            }
+            if (e.shiftKey && (e.key === "{" || e.key === "[")) {
+                e.preventDefault();
+                const i = workspaces.findIndex((w) => w.id === activeId);
+                if (i < 0) return;
+                setActiveId(workspaces[(i - 1 + workspaces.length) % workspaces.length].id);
+                return;
+            }
+            if (e.shiftKey && (e.key === "}" || e.key === "]")) {
+                e.preventDefault();
+                const i = workspaces.findIndex((w) => w.id === activeId);
+                if (i < 0) return;
+                setActiveId(workspaces[(i + 1) % workspaces.length].id);
+                return;
+            }
+        };
+        window.addEventListener("keydown", onKey, { capture: true });
+        return () => window.removeEventListener("keydown", onKey, { capture: true });
+    }, [activeId, workspaces, addWorkspace, closeWorkspace]);
 
     const titleOpacity = useTransform(sizeMV, (v) => {
         const max = lastExpandedRef.current;
@@ -71,6 +150,10 @@ function App() {
         }
     };
 
+    const activeWs = workspaces.find((w) => w.id === activeId);
+    const activeTab = activeWs?.tabs.find((t) => t.id === activeWs.activeTabId);
+    const activeTitle = activeTab?.ptyId != null ? (titles[activeTab.ptyId] ?? "") : "";
+
     return (
         <div className="relative w-full h-full bg-accent-dark/30">
             <Group className="h-full" orientation="horizontal">
@@ -84,7 +167,13 @@ function App() {
                     onResize={handleSidebarResize}
                 >
                     <div className="absolute inset-0 top-11">
-                        <Sidebar />
+                        <Sidebar
+                            workspaces={workspaces}
+                            activeId={activeId}
+                            titles={titles}
+                            onActivate={setActiveId}
+                            onClose={closeWorkspace}
+                        />
                     </div>
                 </Panel>
                 <MotionSeparator
@@ -93,7 +182,21 @@ function App() {
                 />
                 <Panel className="relative">
                     <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-lg overflow-hidden border border-border">
-                        {terminalRef.current}
+                        {workspaces.map((ws) => (
+                            <div
+                                key={ws.id}
+                                style={{ display: ws.id === activeId ? "block" : "none" }}
+                                className="absolute inset-0"
+                            >
+                                <WorkspaceView
+                                    workspace={ws}
+                                    active={ws.id === activeId}
+                                    onTabSpawned={(tabId, ptyId) =>
+                                        handleTabSpawned(ws.id, tabId, ptyId)
+                                    }
+                                />
+                            </div>
+                        ))}
                     </div>
                 </Panel>
             </Group>
@@ -106,7 +209,7 @@ function App() {
                     style={{ opacity: titleOpacity }}
                     className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
                 >
-                    {title}
+                    {activeTitle}
                 </motion.span>
             </Titlebar>
         </div>

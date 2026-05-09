@@ -10,7 +10,7 @@ use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibranc
 
 use accent::get_accent_color;
 use config::get_config;
-use pty::{PtyState, pty_resize, pty_spawn, pty_write};
+use pty::{PtyState, pty_close, pty_get_cwd, pty_resize, pty_spawn, pty_write};
 use theme::get_theme_css;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -48,6 +48,8 @@ pub fn run() {
             pty_spawn,
             pty_write,
             pty_resize,
+            pty_close,
+            pty_get_cwd,
             get_config,
             get_theme_css,
             get_accent_color

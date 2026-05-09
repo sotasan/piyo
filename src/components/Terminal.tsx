@@ -21,6 +21,12 @@ type AppConfig = {
     theme: string;
 };
 
+type TerminalProps = {
+    active: boolean;
+    cwd?: string;
+    onSpawned?: (id: number) => void;
+};
+
 const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
 
 function fontStack(family: string): string {
@@ -40,8 +46,15 @@ function readThemeColors() {
     };
 }
 
-function Terminal() {
+function Terminal({ active, cwd, onSpawned }: TerminalProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const termRef = useRef<XtermTerminal | null>(null);
+    const ptyIdRef = useRef<number | null>(null);
+    const cwdRef = useRef(cwd);
+    const onSpawnedRef = useRef(onSpawned);
+    const activeRef = useRef(active);
+    onSpawnedRef.current = onSpawned;
+    activeRef.current = active;
 
     useEffect(() => {
         const container = containerRef.current;
@@ -65,8 +78,10 @@ function Terminal() {
             });
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
+                    const id = ptyIdRef.current;
+                    if (id == null) return false;
                     term.write("\x1b[3J");
-                    invoke("pty_write", { data: "\x0c" });
+                    invoke("pty_write", { id, data: "\x0c" });
                     return false;
                 }
                 return true;
@@ -100,6 +115,10 @@ function Terminal() {
             dispose = () => {
                 ro.disconnect();
                 term.dispose();
+                const id = ptyIdRef.current;
+                if (id != null) {
+                    invoke("pty_close", { id }).catch(() => {});
+                }
             };
 
             await webFonts.loadFonts([FALLBACK_FONTS[0]]);
@@ -111,7 +130,8 @@ function Terminal() {
                 term.loadAddon(new WebglAddon());
             } catch {}
             fit.fit();
-            term.focus();
+            termRef.current = term;
+            if (activeRef.current) term.focus();
             ro.observe(container);
 
             const events = new Channel<PtyEvent>();
@@ -120,10 +140,29 @@ function Terminal() {
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
                 else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
             };
-            term.onData((data) => invoke("pty_write", { data }));
-            term.onResize(({ cols, rows }) => invoke("pty_resize", { cols, rows }));
+            term.onData((data) => {
+                const id = ptyIdRef.current;
+                if (id == null) return;
+                invoke("pty_write", { id, data });
+            });
+            term.onResize(({ cols, rows }) => {
+                const id = ptyIdRef.current;
+                if (id == null) return;
+                invoke("pty_resize", { id, cols, rows });
+            });
 
-            await invoke("pty_spawn", { events, cols: term.cols, rows: term.rows });
+            const id = await invoke<number>("pty_spawn", {
+                events,
+                cwd: cwdRef.current,
+                cols: term.cols,
+                rows: term.rows,
+            });
+            if (ac.signal.aborted) {
+                invoke("pty_close", { id }).catch(() => {});
+                return;
+            }
+            ptyIdRef.current = id;
+            onSpawnedRef.current?.(id);
         })();
 
         return () => {
@@ -131,6 +170,10 @@ function Terminal() {
             dispose?.();
         };
     }, []);
+
+    useEffect(() => {
+        if (active) termRef.current?.focus();
+    }, [active]);
 
     return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;
 }
