@@ -147,11 +147,7 @@ function App() {
         };
     }, []);
 
-    const titleOpacity = useTransform(sizeMV, (v) => {
-        const max = lastExpandedRef.current;
-        if (max <= 0) return 1;
-        return Math.max(0, Math.min(1, 1 - v / max));
-    });
+    const titleLeft = useTransform(sizeMV, (v) => `${v}px`);
     const separatorWidth = useTransform(sizeMV, (v) => Math.min(SEPARATOR_PX, Math.max(0, v)));
 
     useMotionValueEvent(sizeMV, "change", (v) => {
@@ -231,10 +227,7 @@ function App() {
             >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (
-                    <motion.div
-                        style={{ opacity: titleOpacity }}
-                        className="absolute inset-y-0 right-0"
-                    >
+                    <motion.div className="absolute inset-y-0 right-0" style={{ left: titleLeft }}>
                         <TabBar
                             tabs={tabs.map(({ id, title }) => ({ id, title }))}
                             activeId={activeId}
@@ -251,12 +244,12 @@ function App() {
                         />
                     </motion.div>
                 ) : (
-                    <motion.span
-                        style={{ opacity: titleOpacity }}
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
+                    <motion.div
+                        className="absolute inset-y-0 right-0 flex items-center justify-center pointer-events-none"
+                        style={{ left: titleLeft }}
                     >
-                        {activeTitle}
-                    </motion.span>
+                        <span className="text-foreground text-sm select-none">{activeTitle}</span>
+                    </motion.div>
                 )}
             </Titlebar>
         </div>
