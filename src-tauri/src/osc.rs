@@ -120,6 +120,12 @@ fn join_payload(params: &[&[u8]], from: usize) -> Option<String> {
     String::from_utf8(params[from..].join(b";".as_slice())).ok()
 }
 
+/// Parse an OSC 7 `file://host/path` URI into a percent-decoded path string.
+///
+/// Note: bash/zsh/fish integration scripts emit `$PWD` without percent-
+/// encoding, so paths containing literal `%XX` (where XX is a hex pair)
+/// will be incorrectly decoded. In practice this is rare on Unix.
+/// Nushell paths are properly URI-encoded via `url encode`.
 fn parse_file_uri(uri: &str) -> Option<String> {
     let rest = uri.strip_prefix("file://")?;
     // rest = "host/path" — drop everything up to and including the first '/'
@@ -153,5 +159,62 @@ fn hex(b: u8) -> Option<u8> {
         b'a'..=b'f' => Some(b - b'a' + 10),
         b'A'..=b'F' => Some(b - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_simple_uri() {
+        assert_eq!(parse_file_uri("file://host/tmp"), Some("/tmp".into()));
+    }
+
+    #[test]
+    fn parse_empty_host() {
+        assert_eq!(parse_file_uri("file:///tmp"), Some("/tmp".into()));
+    }
+
+    #[test]
+    fn parse_missing_scheme() {
+        assert_eq!(parse_file_uri("/tmp"), None);
+    }
+
+    #[test]
+    fn parse_no_path() {
+        assert_eq!(parse_file_uri("file://host"), None);
+    }
+
+    #[test]
+    fn parse_percent_encoded() {
+        assert_eq!(
+            parse_file_uri("file://host/tmp/foo%20bar"),
+            Some("/tmp/foo bar".into()),
+        );
+    }
+
+    #[test]
+    fn parse_invalid_percent_passes_through() {
+        // %ZZ is not valid hex; parser leaves the bytes as-is
+        assert_eq!(
+            parse_file_uri("file://host/tmp/%ZZ"),
+            Some("/tmp/%ZZ".into()),
+        );
+    }
+
+    #[test]
+    fn parse_trailing_partial_percent() {
+        // Insufficient bytes after % — left literal
+        assert_eq!(parse_file_uri("file://host/tmp/%2"), Some("/tmp/%2".into()),);
+    }
+
+    #[test]
+    fn parse_unicode_via_utf8() {
+        // %F0%9F%8D%84 = 🍄 (4-byte UTF-8)
+        assert_eq!(
+            parse_file_uri("file://host/tmp/%F0%9F%8D%84"),
+            Some("/tmp/🍄".into()),
+        );
     }
 }
