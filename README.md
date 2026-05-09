@@ -17,7 +17,7 @@
 - 🔗 Clickable hyperlinks
 - 📊 Progress reporting (ConEmu OSC 9;4)
 - 🔔 Desktop notifications (OSC 9, 777)
-- 🤖 Claude Code task-finish banners
+- 🤖 Claude Code, Codex, and Opencode task-finish banners
 - 🐚 Bash, Zsh, Fish, and Nushell shell integration
 - 🌈 Full Unicode and emoji width handling
 - 🎯 Live macOS accent color sync

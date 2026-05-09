@@ -1,0 +1,20 @@
+#!/bin/sh
+self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
+
+plugin_dir="${HOME}/.config/opencode/plugins"
+plugin_file="$plugin_dir/piyo-notify.js"
+plugin_content='import { writeFileSync } from "node:fs"
+export const Piyo = async () => ({
+    event: async ({ event }) => {
+        if (event.type !== "session.idle") return
+        try { writeFileSync("/dev/tty", "\x1b]7496;opencode;idle;{}\x07") } catch {}
+    },
+})
+'
+
+if [ ! -f "$plugin_file" ] || ! printf %s "$plugin_content" | cmp -s - "$plugin_file" 2>/dev/null; then
+    mkdir -p "$plugin_dir" 2>/dev/null && printf %s "$plugin_content" > "$plugin_file" 2>/dev/null
+fi
+
+exec opencode "$@"

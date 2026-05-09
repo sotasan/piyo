@@ -29,25 +29,31 @@ impl OscPerformer {
     }
 
     fn dispatch_agent(&self, name: &str, subcommand: &str, payload: &str) {
-        if let ("claude", "stop") = (name, subcommand) {
-            self.handle_claude_stop(payload);
+        match (name, subcommand) {
+            ("claude", "stop") => {
+                self.handle_agent_complete("Claude Code", payload, Some("last_assistant_message"))
+            }
+            ("codex", "turn-complete") => {
+                self.handle_agent_complete("Codex", payload, Some("last-assistant-message"))
+            }
+            ("opencode", "idle") => self.handle_agent_complete("Opencode", payload, None),
+            _ => {}
         }
     }
 
-    fn handle_claude_stop(&self, payload: &str) {
+    fn handle_agent_complete(&self, title: &str, payload: &str, message_key: Option<&str>) {
         let payload = payload.trim();
         if payload.is_empty() || self.window_focused() {
             return;
         }
-        let body = serde_json::from_str::<serde_json::Value>(payload)
-            .ok()
-            .and_then(|v| {
-                v.get("last_assistant_message")
-                    .and_then(|m| m.as_str())
-                    .map(String::from)
+        let body = message_key
+            .and_then(|key| {
+                serde_json::from_str::<serde_json::Value>(payload)
+                    .ok()
+                    .and_then(|v| v.get(key).and_then(|m| m.as_str()).map(String::from))
             })
             .unwrap_or_else(|| "Task complete".to_string());
-        self.notify("Claude Code", &body);
+        self.notify(title, &body);
     }
 }
 
