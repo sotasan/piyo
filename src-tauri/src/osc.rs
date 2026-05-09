@@ -64,6 +64,16 @@ impl Perform for OscPerformer {
                     );
                 }
             }
+            b"7" => {
+                if let Some(uri) = join_payload(params, 1)
+                    && let Some(path) = parse_file_uri(&uri)
+                {
+                    let _ = self.app.emit(
+                        "pty:cwd",
+                        &serde_json::json!({ "rid": self.rid, "cwd": path }),
+                    );
+                }
+            }
             b"9" => {
                 if params.get(1) == Some(&b"4".as_slice()) {
                     return;
@@ -108,4 +118,40 @@ fn join_payload(params: &[&[u8]], from: usize) -> Option<String> {
         return None;
     }
     String::from_utf8(params[from..].join(b";".as_slice())).ok()
+}
+
+fn parse_file_uri(uri: &str) -> Option<String> {
+    let rest = uri.strip_prefix("file://")?;
+    // rest = "host/path" — drop everything up to and including the first '/'
+    let slash = rest.find('/')?;
+    let raw = &rest[slash..];
+    Some(percent_decode(raw))
+}
+
+fn percent_decode(s: &str) -> String {
+    let mut out = Vec::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+        {
+            out.push((h << 4) | l);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned())
+}
+
+fn hex(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
