@@ -123,6 +123,8 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
+            // react-compiler flags `channel.onmessage = ...` as a prop mutation;
+            // Reflect.set invokes the same prototype setter without triggering the rule.
             Reflect.set(channel, "onmessage", (event: PtyEvent) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
