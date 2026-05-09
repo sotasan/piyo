@@ -1,13 +1,12 @@
 import Terminal from "@/components/Terminal";
-import type { Workspace } from "@/workspaces";
+import type { Workspace } from "@/workspaceStore";
 
 type Props = {
     workspace: Workspace;
     active: boolean;
-    onTabSpawned: (tabId: number, ptyId: number) => void;
 };
 
-function WorkspaceView({ workspace, active, onTabSpawned }: Props) {
+function WorkspaceView({ workspace, active }: Props) {
     return (
         <div className="absolute inset-0">
             {workspace.tabs.map((tab) => (
@@ -16,10 +15,7 @@ function WorkspaceView({ workspace, active, onTabSpawned }: Props) {
                     style={{ display: tab.id === workspace.activeTabId ? "block" : "none" }}
                     className="absolute inset-0"
                 >
-                    <Terminal
-                        active={active && tab.id === workspace.activeTabId}
-                        onSpawned={(ptyId) => onTabSpawned(tab.id, ptyId)}
-                    />
+                    <Terminal tabId={tab.id} active={active && tab.id === workspace.activeTabId} />
                 </div>
             ))}
         </div>

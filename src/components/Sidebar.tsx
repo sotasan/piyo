@@ -1,14 +1,12 @@
-import type { Workspace } from "@/workspaces";
+import { useWorkspaceStore } from "@/workspaceStore";
 
-type Props = {
-    workspaces: Workspace[];
-    activeId: number;
-    titles: Record<number, string>;
-    onActivate: (id: number) => void;
-    onClose: (id: number) => void;
-};
+function Sidebar() {
+    const workspaces = useWorkspaceStore((s) => s.workspaces);
+    const activeId = useWorkspaceStore((s) => s.activeId);
+    const titles = useWorkspaceStore((s) => s.titles);
+    const setActiveId = useWorkspaceStore((s) => s.setActiveId);
+    const closeWorkspace = useWorkspaceStore((s) => s.closeWorkspace);
 
-function Sidebar({ workspaces, activeId, titles, onActivate, onClose }: Props) {
     return (
         <aside className="h-full bg-transparent flex flex-col items-center py-2 gap-1.5">
             {workspaces.map((ws, i) => {
@@ -21,7 +19,7 @@ function Sidebar({ workspaces, activeId, titles, onActivate, onClose }: Props) {
                     <div key={ws.id} className="relative group">
                         <button
                             type="button"
-                            onClick={() => onActivate(ws.id)}
+                            onClick={() => setActiveId(ws.id)}
                             title={title}
                             aria-label={title}
                             aria-current={active ? "true" : undefined}
@@ -42,7 +40,7 @@ function Sidebar({ workspaces, activeId, titles, onActivate, onClose }: Props) {
                                 type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onClose(ws.id);
+                                    closeWorkspace(ws.id);
                                 }}
                                 aria-label={`Close ${title}`}
                                 className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-background border border-border opacity-0 group-hover:opacity-100 flex items-center justify-center"

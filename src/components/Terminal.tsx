@@ -1,178 +1,29 @@
 import { useEffect, useRef } from "react";
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
-import { FitAddon } from "@xterm/addon-fit";
-import { ImageAddon } from "@xterm/addon-image";
-import { ProgressAddon } from "@xterm/addon-progress";
-import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
-import { WebFontsAddon } from "@xterm/addon-web-fonts";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
-import "@xterm/xterm/css/xterm.css";
+import { TerminalSession } from "@/terminal";
 
-type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
-
-type AppConfig = {
-    font_family: string;
-    font_size: number;
-    padding: string;
-    theme: string;
-};
-
-type TerminalProps = {
+type Props = {
+    tabId: number;
     active: boolean;
-    cwd?: string;
-    onSpawned?: (id: number) => void;
 };
 
-const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
-
-function fontStack(family: string): string {
-    return [family, ...FALLBACK_FONTS]
-        .filter(Boolean)
-        .map((f) => (f.includes(" ") ? `'${f}'` : f))
-        .join(", ");
-}
-
-function readThemeColors() {
-    const styles = getComputedStyle(document.documentElement);
-    const v = (name: string) => styles.getPropertyValue(name).trim();
-    return {
-        background: v("--theme-background"),
-        foreground: v("--theme-foreground"),
-        cursor: v("--theme-cursor"),
-    };
-}
-
-function Terminal({ active, cwd, onSpawned }: TerminalProps) {
+function Terminal({ tabId, active }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const termRef = useRef<XtermTerminal | null>(null);
-    const ptyIdRef = useRef<number | null>(null);
-    const cwdRef = useRef(cwd);
-    const onSpawnedRef = useRef(onSpawned);
-    const activeRef = useRef(active);
-    onSpawnedRef.current = onSpawned;
-    activeRef.current = active;
+    const sessionRef = useRef<TerminalSession | null>(null);
 
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
-
-        const ac = new AbortController();
-        let dispose: (() => void) | undefined;
-
-        (async () => {
-            const config = await invoke<AppConfig>("get_config");
-            if (ac.signal.aborted) return;
-
-            const term = new XtermTerminal({
-                fontSize: config.font_size,
-                fontFamily: fontStack(config.font_family),
-                theme: readThemeColors(),
-                cursorBlink: true,
-                quirks: { allowSetCursorBlink: true },
-                scrollbar: { width: 8 },
-                allowProposedApi: true,
-            });
-            term.attachCustomKeyEventHandler((event) => {
-                if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    const id = ptyIdRef.current;
-                    if (id == null) return false;
-                    term.write("\x1b[3J");
-                    invoke("pty_write", { id, data: "\x0c" });
-                    return false;
-                }
-                return true;
-            });
-            const fit = new FitAddon();
-            const webFonts = new WebFontsAddon();
-            for (const addon of [
-                fit,
-                webFonts,
-                new UnicodeGraphemesAddon(),
-                new ClipboardAddon(),
-                new ImageAddon(),
-                new ProgressAddon(),
-                new WebLinksAddon((event, uri) => {
-                    event.preventDefault();
-                    openUrl(uri);
-                }),
-            ]) {
-                term.loadAddon(addon);
-            }
-            term.unicode.activeVersion = "15-graphemes";
-
-            const ro = new ResizeObserver(() => {
-                setTimeout(() => {
-                    if (ac.signal.aborted) return;
-                    try {
-                        fit.fit();
-                    } catch {}
-                });
-            });
-            dispose = () => {
-                ro.disconnect();
-                term.dispose();
-                const id = ptyIdRef.current;
-                if (id != null) {
-                    invoke("pty_close", { id }).catch(() => {});
-                }
-            };
-
-            await webFonts.loadFonts([FALLBACK_FONTS[0]]);
-            if (ac.signal.aborted) return;
-
-            term.open(container);
-            if (term.element) term.element.style.padding = config.padding;
-            try {
-                term.loadAddon(new WebglAddon());
-            } catch {}
-            fit.fit();
-            termRef.current = term;
-            if (activeRef.current) term.focus();
-            ro.observe(container);
-
-            const events = new Channel<PtyEvent>();
-            events.onmessage = (event) => {
-                if (ac.signal.aborted) return;
-                if (event.kind === "data") term.write(new Uint8Array(event.data));
-                else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
-            };
-            term.onData((data) => {
-                const id = ptyIdRef.current;
-                if (id == null) return;
-                invoke("pty_write", { id, data });
-            });
-            term.onResize(({ cols, rows }) => {
-                const id = ptyIdRef.current;
-                if (id == null) return;
-                invoke("pty_resize", { id, cols, rows });
-            });
-
-            const id = await invoke<number>("pty_spawn", {
-                events,
-                cwd: cwdRef.current,
-                cols: term.cols,
-                rows: term.rows,
-            });
-            if (ac.signal.aborted) {
-                invoke("pty_close", { id }).catch(() => {});
-                return;
-            }
-            ptyIdRef.current = id;
-            onSpawnedRef.current?.(id);
-        })();
-
+        const session = new TerminalSession(tabId, container);
+        sessionRef.current = session;
         return () => {
-            ac.abort();
-            dispose?.();
+            session.dispose();
+            sessionRef.current = null;
         };
-    }, []);
+    }, [tabId]);
 
     useEffect(() => {
-        if (active) termRef.current?.focus();
+        if (!active) return;
+        return sessionRef.current?.focusWhenReady();
     }, [active]);
 
     return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;

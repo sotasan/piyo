@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
@@ -38,7 +38,6 @@ pub enum PtyEvent {
 pub struct PtyInstance {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    cwd: Arc<Mutex<Option<PathBuf>>>,
 }
 
 #[derive(Default)]
@@ -152,7 +151,6 @@ pub async fn pty_spawn(
     app: AppHandle,
     state: State<'_, PtyState>,
     events: Channel<PtyEvent>,
-    cwd: Option<String>,
     cols: u16,
     rows: u16,
 ) -> CommandResult<u64> {
@@ -167,11 +165,7 @@ pub async fn pty_spawn(
         })
         .context("failed to open pty")?;
 
-    let initial_cwd = match cwd {
-        Some(p) => PathBuf::from(p),
-        None => etcetera::home_dir().context("failed to resolve home dir")?,
-    };
-
+    let cwd = etcetera::home_dir().context("failed to resolve home dir")?;
     let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
     let shell = Shell::detect(&shell_path);
     let resource_dir = app
@@ -180,13 +174,7 @@ pub async fn pty_spawn(
         .context("failed to resolve resource dir")?;
     let integration_dir = resource_dir.join("shell");
     let bin_dir = resource_dir.join("bin");
-    let cmd = build_command(
-        &shell_path,
-        &shell,
-        &integration_dir,
-        &bin_dir,
-        &initial_cwd,
-    )?;
+    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir, &cwd)?;
 
     let mut child = pair
         .slave
@@ -203,21 +191,18 @@ pub async fn pty_spawn(
         .take_writer()
         .context("failed to take pty writer")?;
 
-    let cwd_arc = Arc::new(Mutex::new(Some(initial_cwd)));
-
     state.instances.lock().unwrap().insert(
         id,
         PtyInstance {
             master: pair.master,
             writer,
-            cwd: cwd_arc.clone(),
         },
     );
 
-    let app_for_osc = app.clone();
+    let osc_app = app.clone();
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
-        let mut performer = OscPerformer::new(app_for_osc, id, cwd_arc);
+        let mut performer = OscPerformer::new(osc_app, id);
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
@@ -272,14 +257,4 @@ pub fn pty_resize(state: State<'_, PtyState>, id: u64, cols: u16, rows: u16) -> 
 pub fn pty_close(state: State<'_, PtyState>, id: u64) -> CommandResult<()> {
     state.instances.lock().unwrap().remove(&id);
     Ok(())
-}
-
-#[tauri::command]
-pub fn pty_get_cwd(state: State<'_, PtyState>, id: u64) -> CommandResult<Option<String>> {
-    let guard = state.instances.lock().unwrap();
-    let Some(inst) = guard.get(&id) else {
-        return Ok(None);
-    };
-    let cwd = inst.cwd.lock().unwrap().clone();
-    Ok(cwd.map(|p| p.to_string_lossy().into_owned()))
 }

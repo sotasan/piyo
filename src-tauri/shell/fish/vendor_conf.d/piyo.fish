@@ -2,10 +2,6 @@ function _piyo_prompt_cursor --on-event fish_prompt
     printf '\e[5 q\e[?12l\e[?12h'
 end
 
-function _piyo_osc7 --on-event fish_prompt
-    printf '\e]7;file://%s%s\e\\' (hostname) "$PWD"
-end
-
 function _piyo_preexec_cursor --on-event fish_preexec
     printf '\e[2 q'
 end

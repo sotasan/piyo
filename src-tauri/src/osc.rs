@@ -1,14 +1,12 @@
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use vte::Perform;
 
+const TITLE_EVENT: &str = "pty:title";
+
 pub struct OscPerformer {
     app: AppHandle,
     pty_id: u64,
-    cwd: Arc<Mutex<Option<PathBuf>>>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -17,15 +15,9 @@ struct TitleEvent<'a> {
     title: &'a str,
 }
 
-#[derive(Clone, serde::Serialize)]
-struct CwdEvent<'a> {
-    id: u64,
-    cwd: &'a str,
-}
-
 impl OscPerformer {
-    pub fn new(app: AppHandle, pty_id: u64, cwd: Arc<Mutex<Option<PathBuf>>>) -> Self {
-        Self { app, pty_id, cwd }
+    pub fn new(app: AppHandle, pty_id: u64) -> Self {
+        Self { app, pty_id }
     }
 
     fn notify(&self, title: &str, body: &str) {
@@ -66,24 +58,6 @@ impl OscPerformer {
             .unwrap_or_else(|| "Task complete".to_string());
         self.notify("Claude Code", &body);
     }
-
-    fn handle_cwd(&self, payload: &str) {
-        let Some(path) = parse_file_uri_path(payload) else {
-            return;
-        };
-        if path.is_empty() {
-            return;
-        }
-        let buf = PathBuf::from(&path);
-        *self.cwd.lock().unwrap() = Some(buf);
-        let _ = self.app.emit(
-            "pty:cwd",
-            CwdEvent {
-                id: self.pty_id,
-                cwd: &path,
-            },
-        );
-    }
 }
 
 impl Perform for OscPerformer {
@@ -93,17 +67,12 @@ impl Perform for OscPerformer {
             b"0" | b"2" => {
                 if let Some(title) = join_payload(params, 1) {
                     let _ = self.app.emit(
-                        "pty:title",
+                        TITLE_EVENT,
                         TitleEvent {
                             id: self.pty_id,
                             title: &title,
                         },
                     );
-                }
-            }
-            b"7" => {
-                if let Some(payload) = join_payload(params, 1) {
-                    self.handle_cwd(&payload);
                 }
             }
             b"9" => {
@@ -150,40 +119,4 @@ fn join_payload(params: &[&[u8]], from: usize) -> Option<String> {
         return None;
     }
     String::from_utf8(params[from..].join(b";".as_slice())).ok()
-}
-
-fn parse_file_uri_path(uri: &str) -> Option<String> {
-    let rest = uri.strip_prefix("file://").unwrap_or(uri);
-    let path_start = rest.find('/').unwrap_or(0);
-    let raw = &rest[path_start..];
-    Some(percent_decode(raw))
-}
-
-fn percent_decode(input: &str) -> String {
-    let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            let hi = hex_val(bytes[i + 1]);
-            let lo = hex_val(bytes[i + 2]);
-            if let (Some(hi), Some(lo)) = (hi, lo) {
-                out.push((hi << 4) | lo);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8(out).unwrap_or_else(|_| input.to_string())
-}
-
-fn hex_val(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
 }

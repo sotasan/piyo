@@ -8,7 +8,6 @@ if "PIYO_BIN" in $env {
 
 $env.config.hooks.pre_prompt = (
     ($env.config.hooks.pre_prompt? | default [])
-    | append {|| print -n $"\u{1b}]7;file://(sys host | get hostname)(pwd)\u{1b}\\" }
     | append {|| print -n "\u{1b}[5 q\u{1b}[?12l\u{1b}[?12h" }
 )
 
