@@ -217,11 +217,17 @@ case at app startup before the first tab spawns.
 
 `Titlebar.tsx` stays a thin shell. `App.tsx` chooses what to render inside:
 
-- `tabs.length === 1`: existing centered `motion.span` title (today's UI,
-  preserved exactly — no regression).
+- `tabs.length === 1`: centered title text. The current `titleOpacity`
+  fade-on-sidebar-open is **removed** — the title stays at full opacity at
+  all times. To keep the title from sitting under the sidebar when it's
+  open, the title's container gets a `paddingLeft` driven by the existing
+  `sizeMV` motion value, so the title centers within the terminal area
+  rather than the full window. (Replaces the `motion.span` opacity
+  transform with a `motion.div` width/padding transform.)
 - `tabs.length >= 2`: a new `TabBar` component renders a horizontal row of
-  tabs between the sidebar toggle and the right edge. Tabs share available
-  width equally, with a min width and ellipsis truncation. Each tab:
+  tabs in the same terminal-area-centered region (same `paddingLeft`
+  driven by `sizeMV`). Tabs share available width equally, with a min
+  width and ellipsis truncation. Each tab:
     - Title text (truncated)
     - Close × visible on hover (any tab, active included — matches Ghostty)
     - Active tab styled with the existing accent variables
@@ -230,6 +236,10 @@ case at app startup before the first tab spawns.
       so the user can still grab the titlebar to move the window. Tabs
       themselves do _not_ carry the drag-region attribute — that would steal
       pointer events from dnd-kit's drag sensor.
+
+The title and tabs are always visible regardless of sidebar state — no
+opacity fade. Sidebar open → titlebar contents shift right with the
+animation. Sidebar closed → contents recentre across the full width.
 
 ### Tab reorder (dnd-kit)
 
@@ -339,7 +349,11 @@ This project has no automated test runner today; verification is manual.
   `/tmp`. Repeat per shell (bash, zsh, fish, nu).
 - Type `exit` in a tab — tab disappears. Last tab `exit` closes window.
 - `Cmd+W` in last tab closes window.
-- Single-tab titlebar matches today exactly (visual diff against current).
+- Open the sidebar in single-tab mode: title remains at full opacity (no
+  fade) and shifts right to stay centered within the terminal area.
+  Close the sidebar: title recentres across the full width.
+- Multi-tab + sidebar open: tab strip stays at full opacity and shifts
+  with the sidebar animation; no overlap with the sidebar.
 - 2+ tab titlebar: × shows on hover for any tab (active or not); click
   closes that tab.
 - Drag a tab to reorder; verify `Cmd+N` jumps to the new position; verify
