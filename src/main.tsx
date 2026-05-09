@@ -45,6 +45,8 @@ if (import.meta.env.PROD) {
                 await update.downloadAndInstall();
                 await relaunch();
             }
-        } catch {}
+        } catch (e) {
+            console.warn("update check failed", e);
+        }
     })();
 }
