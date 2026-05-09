@@ -220,7 +220,6 @@ function App() {
                     <motion.div
                         style={{ opacity: titleOpacity }}
                         className="absolute inset-y-0 right-0"
-                        animate={{ left: 0 }}
                     >
                         <TabBar
                             tabs={tabs.map(({ id, title }) => ({ id, title }))}

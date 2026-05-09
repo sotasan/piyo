@@ -39,7 +39,7 @@ function TabBar({ tabs, activeId, onActivate, onClose }: Props) {
                                 "size-4 flex items-center justify-center rounded-sm",
                                 "opacity-0 group-hover:opacity-100",
                                 "hover:bg-accent-dark/40",
-                                "i-lucide-x text-foreground/80",
+                                "icon-[lucide--x] text-foreground/80",
                             ].join(" ")}
                         />
                     </button>
