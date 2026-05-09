@@ -12,13 +12,20 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 
-type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
+export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
 type AppConfig = {
     font_family: string;
     font_size: number;
     padding: string;
     theme: string;
+};
+
+type Props = {
+    rid: number;
+    channel: Channel<PtyEvent>;
+    active: boolean;
+    onResize?: (cols: number, rows: number) => void;
 };
 
 const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
@@ -40,8 +47,9 @@ function readThemeColors() {
     };
 }
 
-function Terminal() {
+function Terminal({ rid, channel, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const termRef = useRef<XtermTerminal | null>(null);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -63,11 +71,11 @@ function Terminal() {
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
-            let rid: number | null = null;
+            termRef.current = term;
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
                     term.write("\x1b[3J");
-                    if (rid !== null) invoke("pty_write", { rid, data: "\x0c" });
+                    invoke("pty_write", { rid, data: "\x0c" });
                     return false;
                 }
                 return true;
@@ -101,6 +109,7 @@ function Terminal() {
             dispose = () => {
                 ro.disconnect();
                 term.dispose();
+                termRef.current = null;
             };
 
             await webFonts.loadFonts([FALLBACK_FONTS[0]]);
@@ -112,27 +121,23 @@ function Terminal() {
                 term.loadAddon(new WebglAddon());
             } catch {}
             fit.fit();
-            term.focus();
             ro.observe(container);
 
-            const events = new Channel<PtyEvent>();
-            events.onmessage = (event) => {
+            Reflect.set(channel, "onmessage", (event: PtyEvent) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
                 else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
-            };
-
-            rid = await invoke<number>("pty_spawn", {
-                events,
-                cols: term.cols,
-                rows: term.rows,
-                cwd: null,
             });
-            if (ac.signal.aborted) return;
-            const ptyRid = rid;
+            term.onData((data) => invoke("pty_write", { rid, data }));
+            term.onResize(({ cols, rows }) => {
+                invoke("pty_resize", { rid, cols, rows });
+                onResize?.(cols, rows);
+            });
 
-            term.onData((data) => invoke("pty_write", { rid: ptyRid, data }));
-            term.onResize(({ cols, rows }) => invoke("pty_resize", { rid: ptyRid, cols, rows }));
+            // backend-side cols/rows were set by the spawn call in App; resync just in case
+            invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
+
+            if (active) term.focus();
         })();
 
         return () => {
@@ -141,7 +146,21 @@ function Terminal() {
         };
     }, []);
 
-    return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;
+    useEffect(() => {
+        if (active) termRef.current?.focus();
+    }, [active]);
+
+    return (
+        <div
+            className="absolute inset-0 overflow-hidden bg-background"
+            style={{
+                visibility: active ? "visible" : "hidden",
+                pointerEvents: active ? "auto" : "none",
+            }}
+        >
+            <div ref={containerRef} className="absolute inset-0 overflow-hidden" />
+        </div>
+    );
 }
 
 export default Terminal;
