@@ -91,7 +91,10 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     };
 
     return (
-        <div className="absolute inset-x-0 top-0 h-11 flex items-center px-1 gap-1">
+        <div
+            data-tauri-drag-region
+            className="absolute inset-x-0 top-0 h-11 flex items-center px-1 gap-1"
+        >
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
