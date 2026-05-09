@@ -7,6 +7,7 @@ import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
+import TabBar from "@/components/TabBar";
 import Terminal, { type PtyEvent } from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
 import { installMenu, type MenuState } from "@/menu";
@@ -215,12 +216,27 @@ function App() {
                 style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
             >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
-                <motion.span
-                    style={{ opacity: titleOpacity }}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
-                >
-                    {activeTitle}
-                </motion.span>
+                {tabs.length >= 2 ? (
+                    <motion.div
+                        style={{ opacity: titleOpacity }}
+                        className="absolute inset-y-0 right-0"
+                        animate={{ left: 0 }}
+                    >
+                        <TabBar
+                            tabs={tabs.map(({ id, title }) => ({ id, title }))}
+                            activeId={activeId}
+                            onActivate={setActiveId}
+                            onClose={closeTabById}
+                        />
+                    </motion.div>
+                ) : (
+                    <motion.span
+                        style={{ opacity: titleOpacity }}
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
+                    >
+                        {activeTitle}
+                    </motion.span>
+                )}
             </Titlebar>
         </div>
     );
