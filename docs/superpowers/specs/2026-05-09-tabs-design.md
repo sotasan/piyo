@@ -32,48 +32,59 @@ The first tab spawns automatically on app launch (matches today's startup).
 
 ### Rust backend
 
-`PtyState` is replaced by a registry keyed by a backend-assigned `u32` tab id:
+`PtyState` is removed. Each PTY becomes a `PtyHandle` stored in Tauri's
+built-in `ResourceTable`, identified by a `ResourceId` (`u32`). The
+`ResourceId` is the only routing key — frontend tabs use it directly as
+their `id`.
 
 ```rust
-pub struct PtyRegistry {
-    next_id: AtomicU32,
-    tabs: Mutex<HashMap<u32, PtyHandle>>,
+pub struct PtyHandle {
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
 }
 
-struct PtyHandle {
-    master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
-    cwd: Arc<Mutex<Option<PathBuf>>>, // updated by OSC 7 from shell integration
-}
+impl tauri::Resource for PtyHandle {}
 ```
 
-Commands take a `tab_id: u32`:
+`Resource` requires `Send + Sync + 'static`. `MasterPty` and `Box<dyn Write>`
+are `Send` but not `Sync`, so we wrap them in `Mutex` (matching the
+pattern used by today's `PtyState`). `cwd` is not stored on the backend
+— the frontend tracks each tab's cwd in a ref, populated by `pty:cwd`
+events, and passes it back as the `cwd` arg to `pty_spawn` on `Cmd+T`.
 
-- `pty_spawn(events, cols, rows, cwd: Option<String>) -> u32`
-  Spawns a new PTY, returns the new tab id. Optional `cwd` overrides the
-  starting directory; falls back to `$HOME` if absent or invalid.
-- `pty_write(tab_id, data)`
-- `pty_resize(tab_id, cols, rows)`
-- `pty_close(tab_id)`
-  Drops the master from the registry. The child receives `SIGHUP` and exits;
-  the existing reader loop in `spawn_blocking` already emits `PtyEvent::Exit`
-  when the read returns 0, which is the path used for both manual close and
-  natural exit.
+Commands take a `rid: ResourceId`:
 
-Events from the existing per-PTY `Channel<PtyEvent>` already scope cleanly to
-their tab — no change needed there.
+- `pty_spawn(app, events, cols, rows, cwd: Option<String>) -> ResourceId`
+  Spawns a new PTY, builds a `PtyHandle`, calls
+  `app.resources_table().add(handle)`, and returns the resulting `rid`.
+  Optional `cwd` overrides the starting directory; falls back to `$HOME`
+  if absent or invalid.
+- `pty_write(app, rid, data)` — looks up the handle via
+  `app.resources_table().get::<PtyHandle>(rid)?`, writes to its writer.
+- `pty_resize(app, rid, cols, rows)` — same lookup, resizes the master.
+- `pty_close(app, rid)` — `app.resources_table().close(rid)`. The handle
+  is dropped, the master goes out of scope, the child receives `SIGHUP`
+  and exits, and the existing reader loop in `spawn_blocking` emits
+  `PtyEvent::Exit` when the read returns 0. Manual close and natural exit
+  converge on the same path.
+
+The reader loop captures `rid` at spawn time so its OSC events and the
+final `pty:exit` emission carry the routing key.
+
+Events from the per-PTY `Channel<PtyEvent>` already scope cleanly to their
+PTY — no routing needed for the data stream itself.
 
 ### OSC routing
 
-`OscPerformer` gains a `tab_id: u32` field. Every emit is now structured:
+`OscPerformer` gains a `rid: ResourceId` field. Every emit is structured:
 
-- `pty:title` → `{ tabId: u32, title: String }`
-- `pty:cwd` → `{ tabId: u32, cwd: String }` (new — emitted on OSC 7)
-- `pty:exit` → `{ tabId: u32 }` (new — emitted from reader loop on EOF)
+- `pty:title` → `{ rid: u32, title: String }`
+- `pty:cwd` → `{ rid: u32, cwd: String }` (new — emitted on OSC 7)
+- `pty:exit` → `{ rid: u32 }` (new — emitted from reader loop on EOF)
 
 OSC 7 (`ESC ] 7 ; file://host/path BEL`) is parsed in `OscPerformer`,
-URL-decoded, host stripped, and stored in the handle's `cwd` field. Malformed
-URLs are ignored (previous cwd stays).
+URL-decoded, host stripped, and forwarded as a `pty:cwd` event. Malformed
+URLs are ignored.
 
 ### Shell integration
 
@@ -90,21 +101,22 @@ ignores any non-empty host (cwd-only matters).
 
 ### React frontend
 
-State lives in `App.tsx`:
+State lives in `App.tsx`. Tab `id` is the backend `ResourceId` — there's
+only one ID space.
 
 ```ts
-type Tab = { id: number; title: string };
+type Tab = { id: number; title: string }; // id === backend ResourceId
 
 const [tabs, setTabs] = useState<Tab[]>([]);
 const [activeId, setActiveId] = useState<number | null>(null);
-const cwdRef = useRef(new Map<number, string>()); // tab_id → last-known cwd
+const cwdRef = useRef(new Map<number, string>()); // rid → last-known cwd
 ```
 
 `Terminal` is refactored to a per-tab component:
 
 ```tsx
 <Terminal
-  tabId={number}                                       // backend-assigned, known before mount
+  rid={number}                                         // backend ResourceId, known before mount
   channel={Channel<PtyEvent>}                          // pre-created by App, drives the xterm
   active={boolean}                                     // visibility / focus
   onResize={(cols: number, rows: number) => void}      // bubbles to App's dimsRef
@@ -121,35 +133,35 @@ App is the spawner. The flow for any new tab (first tab or `Cmd+T`):
 1. App creates `channel = new Channel<PtyEvent>()`.
 2. App reads cols/rows from a ref tracking the last active terminal's
    dimensions (or sensible defaults like 80×24 for the first tab).
-3. App calls `pty_spawn(channel, cols, rows, cwd)`, awaits the new `tab_id`.
-4. App pushes `{ id: tab_id, title: "" }` into `tabs` and sets `activeId`.
-5. `<Terminal tabId={tab_id} channel={channel} active />` mounts; on mount
+3. App calls `pty_spawn(channel, cols, rows, cwd)`, awaits the new `rid`.
+4. App pushes `{ id: rid, title: "" }` into `tabs` and sets `activeId`.
+5. `<Terminal rid={rid} channel={channel} active />` mounts; on mount
    it opens xterm, attaches `channel.onmessage` to write to xterm, fits,
-   and sends `pty_resize(tab_id, cols, rows)` to correct backend dims.
+   and sends `pty_resize(rid, cols, rows)` to correct backend dims.
 
 The Channel cleanly delimits each tab's data stream — `Terminal` doesn't
-need to filter by `tabId` for data. Title, cwd, and exit events come via
+need to filter by `rid` for data. Title, cwd, and exit events come via
 global `pty:title` / `pty:cwd` / `pty:exit` listeners in `App.tsx` (those
-_do_ carry `tabId` because they're fan-out events from `OscPerformer`).
+_do_ carry `rid` because they're fan-out events from `OscPerformer`).
 
 Top-level event listeners in `App.tsx`:
 
 ```ts
-listen<{ tabId: number; title: string }>("pty:title", (e) =>
-    setTabs((t) => t.map((x) => (x.id === e.payload.tabId ? { ...x, title: e.payload.title } : x))),
+listen<{ rid: number; title: string }>("pty:title", (e) =>
+    setTabs((t) => t.map((x) => (x.id === e.payload.rid ? { ...x, title: e.payload.title } : x))),
 );
 
-listen<{ tabId: number; cwd: string }>("pty:cwd", (e) =>
-    cwdRef.current.set(e.payload.tabId, e.payload.cwd),
+listen<{ rid: number; cwd: string }>("pty:cwd", (e) =>
+    cwdRef.current.set(e.payload.rid, e.payload.cwd),
 );
 
-listen<{ tabId: number }>("pty:exit", (e) => {
+listen<{ rid: number }>("pty:exit", (e) => {
     setTabs((t) => {
-        const next = t.filter((x) => x.id !== e.payload.tabId);
+        const next = t.filter((x) => x.id !== e.payload.rid);
         if (next.length === 0) getCurrentWindow().close();
         return next;
     });
-    cwdRef.current.delete(e.payload.tabId);
+    cwdRef.current.delete(e.payload.rid);
 });
 ```
 
@@ -236,7 +248,7 @@ case at app startup before the first tab spawns.
 `activationConstraint: { distance: 4 }` so a click doesn't start a drag.
 
 `handleDragEnd` reorders `tabs` via `arrayMove(tabs, oldIndex, newIndex)`.
-Reordering does not touch backend state — `tab_id` is stable, the order
+Reordering does not touch backend state — `rid` is stable, the order
 in the array is the only thing that changes.
 
 The macOS menu's "Show Tab N" items use the array's _display_ order, so
@@ -251,13 +263,13 @@ user intuition.
 "New Tab" menu item or Cmd+T accelerator
   → menu callback in App
   → cwd = stateRef.current.cwdMap.get(activeId)
-  → cols, rows = stateRef.current.lastDims (last active terminal's size)
+  → cols, rows = stateRef.current.dimsRef.current (last active terminal's size)
   → channel = new Channel<PtyEvent>()
-  → tab_id = await pty_spawn(channel, cols, rows, cwd)   // u32
-  → setTabs(prev => [...prev, { id: tab_id, title: "" }])
-  → setActiveId(tab_id)
-  → <Terminal tabId={tab_id} channel={channel} active /> mounts
-  → xterm opens, fits, calls pty_resize(tab_id, cols, rows)
+  → rid = await pty_spawn(channel, cols, rows, cwd)   // ResourceId
+  → setTabs(prev => [...prev, { id: rid, title: "" }])
+  → setActiveId(rid)
+  → <Terminal rid={rid} channel={channel} active /> mounts
+  → xterm opens, fits, calls pty_resize(rid, cols, rows)
   → shell starts, data flows through channel; OSC events flow via globals
 ```
 
@@ -265,10 +277,10 @@ user intuition.
 
 ```
 "Close Tab" menu item, Cmd+W accelerator, or close-× click
-  → pty_close(targetId)
-  → backend drops master from registry
-  → child receives SIGHUP, exits
-  → reader loop returns 0, emits PtyEvent::Exit + pty:exit { tabId }
+  → pty_close(targetRid)
+  → resources_table().close(rid) drops the PtyHandle
+  → master goes out of scope, child receives SIGHUP, exits
+  → reader loop returns 0, emits PtyEvent::Exit + pty:exit { rid }
   → App's pty:exit listener removes tab
   → if tabs.length === 0 after removal, getCurrentWindow().close()
 ```
@@ -282,17 +294,17 @@ natural-exit path converge in the reader loop.
 
 | Unit                    | Responsibility                                                                  | Depends on                                                      |
 | ----------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `PtyRegistry` (Rust)    | Map tab_id → PtyHandle; assign ids; lookups for write/resize/close              | `portable_pty`                                                  |
-| `OscPerformer` (Rust)   | Parse OSC 0/2/7/9/777/7496; emit per-tab events                                 | tab_id, AppHandle                                               |
+| `PtyHandle` (Rust)      | `tauri::Resource` wrapping master/writer in mutexes; lookups via ResourceTable  | `portable_pty`, `tauri::Resource`                               |
+| `OscPerformer` (Rust)   | Parse OSC 0/2/7/9/777/7496; emit per-tab events tagged with `rid`               | rid, AppHandle                                                  |
 | Shell integration files | Emit OSC 7 on every prompt                                                      | (none)                                                          |
-| `App.tsx`               | Tab list, active id, cwd ref, listeners, titlebar mode, menu init               | `Terminal`, `TabBar`, `Titlebar`, `menu.ts`                     |
-| `Terminal.tsx`          | One xterm + PTY for one tab; visible/hidden via `active` prop                   | `tabId`, Tauri commands                                         |
+| `App.tsx`               | Tab list, active rid, cwd ref, listeners, titlebar mode, menu init              | `Terminal`, `TabBar`, `Titlebar`, `menu.ts`                     |
+| `Terminal.tsx`          | One xterm + PTY for one tab; visible/hidden via `active` prop                   | `rid`, Tauri commands                                           |
 | `TabBar.tsx` (new)      | Sortable horizontal tab row, hover/active ×, click-to-activate, dnd-kit reorder | `@dnd-kit/core`, `@dnd-kit/sortable`, tabs, activeId, callbacks |
 | `Titlebar.tsx`          | Drag region, height, padding-for-traffic-lights                                 | (children only)                                                 |
 | `menu.ts` (new)         | Build the macOS menu and bind callbacks via stateRef                            | `@tauri-apps/api/menu`, stateRef                                |
 
 Each unit can be reasoned about in isolation. Notably, `Terminal` no longer
-owns title state at all — it just sends data to its `tabId` and lets OSC
+owns title state at all — it just sends data to its `rid` and lets OSC
 events flow through `App.tsx`.
 
 ## Error handling
@@ -302,12 +314,13 @@ events flow through `App.tsx`.
   plugin; doesn't push a tab. If this happens at app launch (no tabs yet),
   the window stays empty and shows an error state — minimal: a centered
   error label is fine.
-- `pty_write` / `pty_resize` to unknown `tab_id`: backend returns
-  `anyhow!("unknown tab")`. Frontend swallows — it's a normal race with
-  exit.
-- `pty_close` to unknown `tab_id`: same — silent no-op.
+- `pty_write` / `pty_resize` with an unknown `rid`: `resources_table().get`
+  returns `Error::ResourceTableError`; backend converts to `CommandError`
+  and the frontend swallows — it's a normal race with exit.
+- `pty_close` with an unknown `rid`: same — `close` returns an error,
+  frontend ignores.
 - OSC 7 with malformed URL or non-file scheme: ignored. Last good cwd
-  remains in the handle and in `cwdRef`.
+  stays in `cwdRef` on the frontend.
 - Cmd+T while previous spawn is in flight: `pty_spawn` is `async` already.
   Just await — the result will arrive in order.
 
