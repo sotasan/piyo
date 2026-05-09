@@ -31,6 +31,7 @@ function App() {
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [activeId, setActiveId] = useState<number | null>(null);
     const dimsRef = useRef({ cols: 80, rows: 24 });
+    const cwdRef = useRef(new Map<number, string>());
     const stateRef = useRef<MenuState>({ tabs: [], activeId: null });
     useEffect(() => {
         stateRef.current = { tabs: tabs.map(({ id, title }) => ({ id, title })), activeId };
@@ -65,7 +66,9 @@ function App() {
         (async () => {
             const refresh = await installMenu(() => stateRef.current, {
                 newTab: () => {
-                    spawnTab(null).catch((e) => console.error("spawn failed", e));
+                    const id = stateRef.current.activeId;
+                    const cwd = id !== null ? (cwdRef.current.get(id) ?? null) : null;
+                    spawnTab(cwd).catch((e) => console.error("spawn failed", e));
                 },
                 closeActiveTab: () => {
                     const id = stateRef.current.activeId;
@@ -113,10 +116,21 @@ function App() {
         };
     }, []);
 
+    // Cwd routing.
+    useEffect(() => {
+        const unlisten = listen<{ rid: number; cwd: string }>("pty:cwd", (e) => {
+            cwdRef.current.set(e.payload.rid, e.payload.cwd);
+        });
+        return () => {
+            unlisten.then((u) => u());
+        };
+    }, []);
+
     // Exit routing.
     useEffect(() => {
         const unlisten = listen<{ rid: number }>("pty:exit", (e) => {
             const closingRid = e.payload.rid;
+            cwdRef.current.delete(closingRid);
             setTabs((prev) => {
                 const next = prev.filter((t) => t.id !== closingRid);
                 if (next.length === 0) {
