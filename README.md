@@ -24,6 +24,12 @@
 
 ## Installation
 
+### Homebrew
+
+```sh
+brew install --cask sotasan/tap/piyo
+```
+
 ### Manual
 
 Download the latest release from the [releases page](https://github.com/sotasan/piyo/releases/latest).
