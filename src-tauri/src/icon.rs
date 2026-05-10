@@ -22,12 +22,13 @@ mod platform {
     }
 
     #[cached(
-        ty = "SizedCache<(String, u32), Vec<u8>>",
+        ty = "SizedCache<(String, u32, String), Vec<u8>>",
         create = "{ SizedCache::with_size(CACHE_CAPACITY) }",
-        convert = r#"{ (path.to_string(), clamp_size(size)) }"#,
+        convert = r#"{ (path.to_string(), clamp_size(size), revision.to_string()) }"#,
         option = true
     )]
-    pub fn icon_png(path: &str, size: u32) -> Option<Vec<u8>> {
+    pub fn icon_png(path: &str, size: u32, revision: &str) -> Option<Vec<u8>> {
+        let _ = revision;
         render_png(path, clamp_size(size))
     }
 
@@ -53,7 +54,7 @@ mod platform {
 pub use platform::icon_png;
 
 #[cfg(not(target_os = "macos"))]
-pub fn icon_png(_path: &str, _size: u32) -> Option<Vec<u8>> {
+pub fn icon_png(_path: &str, _size: u32, _revision: &str) -> Option<Vec<u8>> {
     None
 }
 
@@ -80,13 +81,21 @@ fn build_response(uri: &str) -> Response<Vec<u8>> {
         return error(StatusCode::BAD_REQUEST, "missing path");
     }
 
-    let size = url
-        .query_pairs()
-        .find(|(k, _)| k == "size")
-        .and_then(|(_, v)| v.parse().ok())
-        .unwrap_or(DEFAULT_SIZE);
+    let mut size = DEFAULT_SIZE;
+    let mut revision = String::new();
+    for (key, value) in url.query_pairs() {
+        match key.as_ref() {
+            "size" => {
+                if let Ok(parsed) = value.parse() {
+                    size = parsed;
+                }
+            }
+            "v" => revision = value.into_owned(),
+            _ => {}
+        }
+    }
 
-    match icon_png(&path, size) {
+    match icon_png(&path, size, &revision) {
         Some(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "image/png")
