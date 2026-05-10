@@ -103,12 +103,13 @@ function App() {
                 style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
             >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
-                <motion.span
+                <motion.div
                     style={{ opacity: titleOpacity }}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-foreground text-sm select-none pointer-events-none"
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-foreground text-sm select-none pointer-events-none"
                 >
+                    <img src="icon://localhost/private/tmp?size=32" alt="" className="h-4 w-4" />
                     {title}
-                </motion.span>
+                </motion.div>
             </Titlebar>
             <CommandPalette />
         </div>
