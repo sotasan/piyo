@@ -9,7 +9,7 @@ permissions:
 jobs:
     release:
         name: Build & release
-        runs-on: macos-latest
+        runs-on: macos-26
 
         steps:
             - name: Checkout
@@ -56,7 +56,7 @@ jobs:
     homebrew:
         name: Bump cask
         needs: release
-        runs-on: macos-latest
+        runs-on: macos-26
         steps:
             - name: Setup Homebrew
               uses: Homebrew/actions/setup-homebrew@main
