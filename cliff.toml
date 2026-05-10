@@ -3,5 +3,4 @@ body = """
 {% for commit in commits -%}
 - {{ commit.message }} by @{{ commit.remote.username | default(value=commit.author.name) }} in {{ commit.id | truncate(length=7, end="") }}
 {% endfor %}
-**Full Changelog**: https://github.com/sotasan/piyo/compare/{{ previous.version }}...{{ version }}
 """
