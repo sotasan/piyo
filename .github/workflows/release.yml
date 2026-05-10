@@ -7,15 +7,39 @@ permissions:
     contents: write
 
 jobs:
-    release:
-        name: Build & release
-        runs-on: macos-26
-
+    notes:
+        name: Generate release notes
+        runs-on: ubuntu-latest
+        outputs:
+            body: ${{ steps.changelog.outputs.content }}
+            tag: ${{ steps.tag.outputs.value }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+
+            - name: Resolve release tag
+              id: tag
+              run: |
+                  version=$(awk -F\" '/^version/ {print $2; exit}' src-tauri/Cargo.toml)
+                  echo "value=v${version}" >> "$GITHUB_OUTPUT"
+
+            - name: Generate release notes
+              id: changelog
+              uses: orhun/git-cliff-action@v4
+              with:
+                  config: cliff.toml
+                  args: --unreleased --tag ${{ steps.tag.outputs.value }}
+
+    release:
+        name: Build & release
+        needs: notes
+        runs-on: macos-26
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
             - name: Setup Bun
               uses: oven-sh/setup-bun@v2
@@ -35,19 +59,6 @@ jobs:
             - name: Install frontend dependencies
               run: bun install --frozen-lockfile
 
-            - name: Resolve release tag
-              id: tag
-              run: |
-                  version=$(awk -F\" '/^version/ {print $2; exit}' src-tauri/Cargo.toml)
-                  echo "value=v${version}" >> "$GITHUB_OUTPUT"
-
-            - name: Generate release notes
-              id: changelog
-              uses: orhun/git-cliff-action@v4
-              with:
-                  config: cliff.toml
-                  args: --unreleased --tag ${{ steps.tag.outputs.value }}
-
             - name: Build & release
               uses: tauri-apps/tauri-action@v0
               env:
@@ -55,9 +66,9 @@ jobs:
                   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
                   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
               with:
-                  tagName: ${{ steps.tag.outputs.value }}
-                  releaseName: "Piyo ${{ steps.tag.outputs.value }}"
-                  releaseBody: ${{ steps.changelog.outputs.content }}
+                  tagName: ${{ needs.notes.outputs.tag }}
+                  releaseName: "Piyo ${{ needs.notes.outputs.tag }}"
+                  releaseBody: ${{ needs.notes.outputs.body }}
                   releaseDraft: false
                   prerelease: false
                   includeUpdaterJson: true
