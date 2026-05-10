@@ -1,0 +1,5 @@
+{
+    "sortImports": true,
+    "sortPackageJson": { "sortScripts": true },
+    "sortTailwindcss": { "stylesheet": "./src/App.css" }
+}
