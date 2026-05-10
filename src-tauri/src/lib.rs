@@ -1,5 +1,6 @@
 mod accent;
 mod config;
+mod icon;
 mod macos;
 mod osc;
 mod pty;
@@ -16,6 +17,7 @@ use theme::get_theme_css;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("icon", icon::handle)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
