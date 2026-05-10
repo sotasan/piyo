@@ -67,4 +67,4 @@ jobs:
                   tap: sotasan/homebrew-tap
                   cask: piyo
                   tag: ${{ needs.release.outputs.tag }}
-                  force: false
+                  no_fork: true
