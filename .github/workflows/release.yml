@@ -8,6 +8,7 @@ permissions:
 
 jobs:
     release:
+        name: Build & release
         runs-on: macos-26
         outputs:
             tag: ${{ steps.tag.outputs.value }}
@@ -55,11 +56,14 @@ jobs:
                   args: --target aarch64-apple-darwin --bundles app,dmg
 
     homebrew:
+        name: Bump Homebrew cask
         needs: release
         runs-on: ubuntu-latest
         steps:
-            - uses: Homebrew/actions/setup-homebrew@main
-            - uses: macauley/action-homebrew-bump-cask@v1
+            - name: Setup Homebrew
+              uses: Homebrew/actions/setup-homebrew@main
+            - name: Bump cask
+              uses: macauley/action-homebrew-bump-cask@v1
               with:
                   token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
                   tap: sotasan/homebrew-tap
