@@ -63,6 +63,9 @@ jobs:
             - name: Setup Homebrew
               uses: Homebrew/actions/setup-homebrew@main
 
+            - name: Install Homebrew style gems
+              run: brew install-bundler-gems --groups=style
+
             - name: Bump cask
               uses: macauley/action-homebrew-bump-cask@v1
               with:
