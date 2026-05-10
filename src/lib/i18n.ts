@@ -13,8 +13,8 @@ export function pickLanguage(tag: string | null): Supported {
     return (SUPPORTED as readonly string[]).includes(base) ? (base as Supported) : "en";
 }
 
-export function initI18n(tag: string | null): void {
-    void i18next.use(initReactI18next).init({
+export function initI18n(tag: string | null): Promise<unknown> {
+    return i18next.use(initReactI18next).init({
         resources: {
             en: { translation: en },
             de: { translation: de },
