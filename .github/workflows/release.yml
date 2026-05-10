@@ -10,8 +10,6 @@ jobs:
     release:
         name: Build & release
         runs-on: macos-latest
-        outputs:
-            tag: ${{ steps.tag.outputs.value }}
 
         steps:
             - name: Checkout
