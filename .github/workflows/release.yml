@@ -54,7 +54,7 @@ jobs:
                   args: --target aarch64-apple-darwin --bundles app,dmg
 
     homebrew:
-        name: Bump Homebrew cask
+        name: Bump cask
         needs: release
         runs-on: macos-latest
         steps:
@@ -64,7 +64,7 @@ jobs:
             - name: Tap
               run: brew tap sotasan/homebrew-tap
 
-            - name: Bump Homebrew cask
+            - name: Bump cask
               uses: Homebrew/actions/bump-packages@main
               with:
                   token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
