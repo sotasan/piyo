@@ -9,6 +9,8 @@ permissions:
 jobs:
     release:
         runs-on: macos-26
+        outputs:
+            tag: ${{ steps.tag.outputs.value }}
 
         steps:
             - name: Checkout
@@ -51,3 +53,14 @@ jobs:
                   prerelease: false
                   includeUpdaterJson: true
                   args: --target aarch64-apple-darwin --bundles app,dmg
+
+    homebrew:
+        needs: release
+        runs-on: ubuntu-latest
+        steps:
+            - uses: macauley/action-homebrew-bump-cask@v1
+              with:
+                  token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  tap: sotasan/homebrew-tap
+                  cask: piyo
+                  tag: ${{ needs.release.outputs.tag }}
