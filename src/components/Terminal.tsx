@@ -11,6 +11,7 @@ import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
+import { i18next } from "@/lib/i18n";
 
 type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
@@ -118,7 +119,8 @@ function Terminal() {
             events.onmessage = (event) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
-                else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
+                else if (event.kind === "exit")
+                    term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
             };
             term.onData((data) => invoke("pty_write", { data }));
             term.onResize(({ cols, rows }) => invoke("pty_resize", { cols, rows }));
