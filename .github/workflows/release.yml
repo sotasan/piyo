@@ -61,21 +61,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Bump cask
-              env:
-                  GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-                  TAG: ${{ needs.release.outputs.tag }}
-              run: |
-                  set -euo pipefail
-                  VERSION="${TAG#v}"
-                  DMG_URL="https://github.com/sotasan/piyo/releases/download/${TAG}/Piyo_${VERSION}_aarch64.dmg"
-                  SHA=$(curl -fsSL "$DMG_URL" | sha256sum | awk '{print $1}')
-
-                  git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/sotasan/homebrew-tap.git" tap
-                  cd tap
-                  sed -i -E "s/^  version \"[^\"]+\"/  version \"${VERSION}\"/" Casks/piyo.rb
-                  sed -i -E "s/^  sha256 \"[^\"]+\"/  sha256 \"${SHA}\"/" Casks/piyo.rb
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  git add Casks/piyo.rb
-                  git commit -m "piyo ${VERSION}"
-                  git push
+              uses: dawidd6/action-homebrew-bump-formula@v5
+              with:
+                  token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  tap: sotasan/homebrew-tap
+                  cask: piyo
+                  tag: ${{ needs.release.outputs.tag }}
+                  force: false
