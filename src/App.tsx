@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
+import CommandPalette from "@/components/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import Terminal from "@/components/Terminal";
@@ -109,6 +110,7 @@ function App() {
                     {title}
                 </motion.span>
             </Titlebar>
+            <CommandPalette />
         </div>
     );
 }
