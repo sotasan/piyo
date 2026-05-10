@@ -1,0 +1,23 @@
+{
+    "palette": {
+        "filesLabel": "Dateien",
+        "commandsLabel": "Befehle",
+        "filesPlaceholder": "Dateien suchen…",
+        "commandsPlaceholder": "Befehl eingeben…",
+        "empty": "Keine Ergebnisse.",
+        "reloadTheme": "Theme neu laden"
+    },
+    "sidebar": {
+        "open": "Seitenleiste öffnen",
+        "close": "Seitenleiste schließen"
+    },
+    "updates": {
+        "title": "Update verfügbar",
+        "prompt": "Piyo {{version}} ist verfügbar. Jetzt installieren?",
+        "install": "Installieren",
+        "later": "Später"
+    },
+    "terminal": {
+        "processExited": "[Prozess beendet]"
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "palette": {
+        "filesLabel": "Files",
+        "commandsLabel": "Commands",
+        "filesPlaceholder": "Search files…",
+        "commandsPlaceholder": "Type a command…",
+        "empty": "No results.",
+        "reloadTheme": "Reload Theme"
+    },
+    "sidebar": {
+        "open": "Open sidebar",
+        "close": "Close sidebar"
+    },
+    "updates": {
+        "title": "Update available",
+        "prompt": "Piyo {{version}} is available. Install now?",
+        "install": "Install",
+        "later": "Later"
+    },
+    "terminal": {
+        "processExited": "[process exited]"
+    }
+}
