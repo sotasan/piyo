@@ -58,13 +58,17 @@ jobs:
     homebrew:
         name: Bump Homebrew cask
         needs: release
-        runs-on: ubuntu-latest
+        runs-on: macos-latest
         steps:
+            - name: Setup Homebrew
+              uses: Homebrew/actions/setup-homebrew@main
+
+            - name: Tap
+              run: brew tap sotasan/homebrew-tap
+
             - name: Bump cask
-              uses: dawidd6/action-homebrew-bump-formula@v5
+              uses: Homebrew/actions/bump-packages@main
               with:
                   token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-                  tap: sotasan/homebrew-tap
-                  cask: piyo
-                  tag: ${{ needs.release.outputs.tag }}
-                  no_fork: true
+                  casks: piyo
+                  fork: false
