@@ -10,7 +10,7 @@ import { applyThemeCss } from "@/lib/services/theme";
 import { checkForUpdates } from "@/lib/services/updates";
 
 const [, , detectedLocale] = await Promise.all([applyThemeCss(), applyAccent(), locale()]);
-initI18n(detectedLocale);
+await initI18n(detectedLocale);
 void subscribeAccent();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
