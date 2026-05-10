@@ -64,7 +64,7 @@ jobs:
             - name: Tap
               run: brew tap sotasan/homebrew-tap
 
-            - name: Bump cask
+            - name: Bump Homebrew cask
               uses: Homebrew/actions/bump-packages@main
               with:
                   token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
