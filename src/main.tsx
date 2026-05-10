@@ -6,8 +6,8 @@ import "@fontsource-variable/jetbrains-mono/index.css";
 import App from "@/App";
 import { initI18n } from "@/lib/i18n";
 import { applyAccent, subscribeAccent } from "@/stores/accent";
-import { applyThemeCss } from "@/lib/services/theme";
-import { checkForUpdates } from "@/lib/services/updates";
+import { applyThemeCss } from "@/lib/theme";
+import { checkForUpdates } from "@/lib/updater";
 
 const [, , detectedLocale] = await Promise.all([applyThemeCss(), applyAccent(), locale()]);
 await initI18n(detectedLocale);
