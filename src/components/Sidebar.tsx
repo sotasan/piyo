@@ -1,5 +1,5 @@
 function Sidebar() {
-    return <aside className="h-full bg-transparent flex flex-col items-center py-2 gap-2" />;
+    return <aside className="flex h-full flex-col items-center gap-2 bg-transparent py-2" />;
 }
 
 export default Sidebar;

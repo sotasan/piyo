@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
+
 import CommandPalette from "@/components/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
 import { useFileIcon } from "@/lib/icon";
+
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
@@ -75,7 +77,7 @@ function App() {
     };
 
     return (
-        <div className="relative w-full h-full bg-accent-dark/30">
+        <div className="relative h-full w-full bg-accent-dark/30">
             <Group className="h-full" orientation="horizontal">
                 <Panel
                     panelRef={sidebarRef}
@@ -83,7 +85,7 @@ function App() {
                     minSize="0%"
                     maxSize="480px"
                     groupResizeBehavior="preserve-pixel-size"
-                    className="overflow-hidden relative"
+                    className="relative overflow-hidden"
                     onResize={handleSidebarResize}
                 >
                     <div className="absolute inset-0 top-11">
@@ -95,7 +97,7 @@ function App() {
                     style={{ width: separatorWidth, flexBasis: separatorWidth }}
                 />
                 <Panel className="relative">
-                    <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-lg overflow-hidden border border-border">
+                    <div className="absolute top-11 right-2 bottom-2 left-2 overflow-hidden rounded-lg border border-border bg-background">
                         {terminalRef.current}
                     </div>
                 </Panel>
@@ -107,7 +109,7 @@ function App() {
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 <motion.div
                     style={{ opacity: titleOpacity }}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-foreground text-sm select-none pointer-events-none"
+                    className="pointer-events-none absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 text-sm text-foreground select-none"
                 >
                     <img src={folderIcon} alt="" className="h-4 w-4" />
                     {title}

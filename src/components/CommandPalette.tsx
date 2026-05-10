@@ -1,9 +1,10 @@
-import { useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { applyAccent } from "@/stores/accent";
+
 import { applyThemeCss } from "@/lib/theme";
+import { applyAccent } from "@/stores/accent";
 
 type PaletteMode = "files" | "commands";
 
@@ -37,7 +38,7 @@ export default function CommandPalette() {
                 placeholder={t(
                     mode === "files" ? "palette.filesPlaceholder" : "palette.commandsPlaceholder",
                 )}
-                className="w-full bg-transparent px-4 py-3 outline-none text-sm border-b border-border placeholder:text-foreground/40"
+                className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-foreground/40"
             />
             <Command.List className="max-h-[320px] overflow-y-auto p-1">
                 <Command.Empty className="py-6 text-center text-sm text-foreground/60">
@@ -49,7 +50,7 @@ export default function CommandPalette() {
                             await Promise.all([applyThemeCss(), applyAccent()]);
                             close();
                         }}
-                        className="px-3 py-2 rounded text-sm cursor-pointer aria-selected:bg-accent/30"
+                        className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
                     >
                         {t("palette.reloadTheme")}
                     </Command.Item>
@@ -62,7 +63,7 @@ export default function CommandPalette() {
                                 console.log("[palette] open file:", f);
                                 close();
                             }}
-                            className="px-3 py-2 rounded text-sm cursor-pointer aria-selected:bg-accent/30"
+                            className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
                         >
                             {f}
                         </Command.Item>

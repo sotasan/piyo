@@ -1,5 +1,6 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
+
 import de from "@/locales/de.json";
 import en from "@/locales/en.json";
 import zh from "@/locales/zh.json";
