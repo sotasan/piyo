@@ -8,7 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
-import { useFileIcon } from "@/lib/services/icon";
+import { useFileIcon } from "@/lib/icon";
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;

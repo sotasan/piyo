@@ -3,7 +3,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useTranslation } from "react-i18next";
 import { applyAccent } from "@/stores/accent";
-import { applyThemeCss } from "@/lib/services/theme";
+import { applyThemeCss } from "@/lib/theme";
 
 type PaletteMode = "files" | "commands";
 
