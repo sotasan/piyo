@@ -22,6 +22,12 @@
 - 🌈 Full Unicode and emoji width handling
 - 🎯 Live macOS accent color sync
 
+## Installation
+
+### Manual
+
+Download the latest release from the [releases page](https://github.com/sotasan/piyo/releases/latest).
+
 ## License
 
 [MIT](LICENSE)
