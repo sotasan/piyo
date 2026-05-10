@@ -1,6 +1,9 @@
 {
     "name": "piyo",
     "private": true,
+    "workspaces": [
+        "docs"
+    ],
     "type": "module",
     "scripts": {
         "dev": "vite",
@@ -11,7 +14,10 @@
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "format": "oxfmt",
-        "format:check": "oxfmt --check"
+        "format:check": "oxfmt --check",
+        "docs:dev": "bun run -F @piyo/docs dev",
+        "docs:build": "bun run -F @piyo/docs build",
+        "docs:preview": "bun run -F @piyo/docs preview"
     },
     "dependencies": {
         "@fontsource-variable/jetbrains-mono": "^5.2.8",
