@@ -1,0 +1,23 @@
+{
+    "palette": {
+        "filesLabel": "文件",
+        "commandsLabel": "命令",
+        "filesPlaceholder": "搜索文件…",
+        "commandsPlaceholder": "输入命令…",
+        "empty": "无结果。",
+        "reloadTheme": "重新加载主题"
+    },
+    "sidebar": {
+        "open": "打开侧边栏",
+        "close": "关闭侧边栏"
+    },
+    "updates": {
+        "title": "有可用更新",
+        "prompt": "Piyo {{version}} 已发布。是否立即安装？",
+        "install": "安装",
+        "later": "稍后"
+    },
+    "terminal": {
+        "processExited": "[进程已退出]"
+    }
+}
