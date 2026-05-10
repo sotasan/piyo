@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
-import { applyAccent } from "@/lib/services/accent";
+import { applyAccent } from "@/stores/accent";
 import { applyThemeCss } from "@/lib/services/theme";
 
 type PaletteMode = "files" | "commands";

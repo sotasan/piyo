@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@fontsource-variable/jetbrains-mono/index.css";
 import App from "@/App";
-import { applyAccent, subscribeAccent } from "@/lib/services/accent";
+import { applyAccent, subscribeAccent } from "@/stores/accent";
 import { applyThemeCss } from "@/lib/services/theme";
 import { checkForUpdates } from "@/lib/services/updates";
 
