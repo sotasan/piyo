@@ -62,6 +62,7 @@ jobs:
         steps:
             - name: Setup Homebrew
               uses: Homebrew/actions/setup-homebrew@main
+
             - name: Bump cask
               uses: macauley/action-homebrew-bump-cask@v1
               with:
