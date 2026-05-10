@@ -9,7 +9,7 @@ permissions:
 jobs:
     release:
         name: Build & release
-        runs-on: macos-26
+        runs-on: macos-latest
         outputs:
             tag: ${{ steps.tag.outputs.value }}
 
