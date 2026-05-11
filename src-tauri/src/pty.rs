@@ -35,10 +35,18 @@ pub enum PtyEvent {
     Exit,
 }
 
+type ChildHandle = Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>;
+
 pub struct PtyHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
-    child: Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>,
+    child: ChildHandle,
+}
+
+fn reap(child: &ChildHandle) {
+    if let Some(mut c) = child.lock().unwrap().take() {
+        let _ = c.wait();
+    }
 }
 
 impl tauri::Resource for PtyHandle {}
@@ -188,7 +196,7 @@ pub async fn pty_spawn(
         .take_writer()
         .context("failed to take pty writer")?;
 
-    let child = Arc::new(Mutex::new(Some(child)));
+    let child: ChildHandle = Arc::new(Mutex::new(Some(child)));
     let child_for_reader = child.clone();
 
     let handle = PtyHandle {
@@ -216,10 +224,7 @@ pub async fn pty_spawn(
                 Err(_) => break,
             }
         }
-        let taken = child_for_reader.lock().unwrap().take();
-        if let Some(mut c) = taken {
-            let _ = c.wait();
-        }
+        reap(&child_for_reader);
         let _ = events.send(PtyEvent::Exit);
         let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
     });
