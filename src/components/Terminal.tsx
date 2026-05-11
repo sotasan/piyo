@@ -13,6 +13,8 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { i18next } from "@/lib/i18n";
+import { applyGhosttyFrame } from "@/lib/xtermGhostty";
+import { handleKey, handleMouse, handleWheel } from "@/lib/xtermInput";
 import { useTabsStore } from "@/stores/tabs";
 
 type AppConfig = {
@@ -78,15 +80,18 @@ function Terminal({ rid, active, onResize }: Props) {
                 quirks: { allowSetCursorBlink: true },
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
+                // Ghostty owns the scrollback. xterm.js just renders the
+                // current viewport, so its own scrollback would be dead
+                // memory.
+                scrollback: 0,
             });
             termRef.current = term;
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    term.write("\x1b[3J");
                     invoke("pty_write", { rid, data: "\x0c" });
                     return false;
                 }
-                return true;
+                return handleKey(rid, event);
             });
             const fit = new FitAddon();
             const webFonts = new WebFontsAddon();
@@ -131,9 +136,28 @@ function Terminal({ rid, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
+            const wheelHandler = (event: WheelEvent) => {
+                if (handleWheel(rid, event)) event.preventDefault();
+            };
+            const mouseHandler = (event: MouseEvent) => {
+                handleMouse(rid, container, term.cols, term.rows, event);
+            };
+            container.addEventListener("wheel", wheelHandler, { passive: false });
+            container.addEventListener("mousedown", mouseHandler);
+            container.addEventListener("mouseup", mouseHandler);
+            container.addEventListener("mousemove", mouseHandler);
+            const prevDispose = dispose;
+            dispose = () => {
+                container.removeEventListener("wheel", wheelHandler);
+                container.removeEventListener("mousedown", mouseHandler);
+                container.removeEventListener("mouseup", mouseHandler);
+                container.removeEventListener("mousemove", mouseHandler);
+                prevDispose?.();
+            };
+
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
-                if (event.kind === "data") term.write(new Uint8Array(event.data));
+                if (event.kind === "frame") applyGhosttyFrame(term, event.data);
                 else if (event.kind === "exit")
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
             });

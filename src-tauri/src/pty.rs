@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -8,6 +9,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, ResourceId};
 
 use crate::osc::OscPerformer;
+use crate::vt::{self, Frame};
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -24,23 +26,45 @@ impl serde::Serialize for CommandError {
     }
 }
 
-type CommandResult<T> = Result<T, CommandError>;
+pub type CommandResult<T> = Result<T, CommandError>;
 
 const READ_BUF_SIZE: usize = 4096;
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind", content = "data")]
 pub enum PtyEvent {
-    Data(Vec<u8>),
+    Frame(Frame),
     Exit,
+}
+
+/// Messages flowing into the session thread. The reader thread sends
+/// `Bytes` / `Shutdown`; Tauri commands send the rest. All session-state
+/// mutation happens on the session thread because the ghostty `Terminal`
+/// is `!Send`.
+enum SessionMsg {
+    Bytes(Vec<u8>),
+    Scroll(isize),
+    Resize { cols: u16, rows: u16 },
+    Shutdown,
 }
 
 type ChildHandle = Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>;
 
 pub struct PtyHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    pub writer: vt::PtyWriter,
     child: ChildHandle,
+    /// Channel into the session thread; commands clone this to dispatch
+    /// state-mutating work. `Sender` is `!Sync`, so park behind a `Mutex`.
+    session_tx: Mutex<Sender<SessionMsg>>,
+    /// Snapshot of the terminal modes the key / mouse encoders need.
+    pub modes: vt::SharedModes,
+}
+
+impl PtyHandle {
+    fn session_sender(&self) -> Sender<SessionMsg> {
+        self.session_tx.lock().unwrap().clone()
+    }
 }
 
 fn reap(child: &ChildHandle) {
@@ -199,34 +223,110 @@ pub async fn pty_spawn(
     let child: ChildHandle = Arc::new(Mutex::new(Some(child)));
     let child_for_reader = child.clone();
 
+    let writer: vt::PtyWriter = Arc::new(Mutex::new(writer));
+    let writer_for_vt = writer.clone();
+    let modes: vt::SharedModes = Arc::new(Mutex::new(vt::Modes::default()));
+    let modes_for_vt = modes.clone();
+
+    let (session_tx, session_rx) = std::sync::mpsc::channel::<SessionMsg>();
+    let session_tx_for_reader = session_tx.clone();
+
     let handle = PtyHandle {
         master: Mutex::new(pair.master),
-        writer: Mutex::new(writer),
+        writer,
         child,
+        session_tx: Mutex::new(session_tx),
+        modes,
     };
 
     let rid = app.resources_table().add(handle);
 
+    // Reader thread: blocking PTY reads, vte OSC sniffing for piyo-specific
+    // codes (7, 9, 777, 7496) that ghostty has no native callback for, then
+    // forward the raw bytes to the session thread.
     let app_for_osc = app.clone();
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
-        let mut performer = OscPerformer::new(app_for_osc.clone(), rid);
+        let mut performer = OscPerformer::new(app_for_osc, rid);
         let mut buf = [0u8; READ_BUF_SIZE];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    parser.advance(&mut performer, &buf[..n]);
-                    if events.send(PtyEvent::Data(buf[..n].to_vec())).is_err() {
+                    let chunk = &buf[..n];
+                    parser.advance(&mut performer, chunk);
+                    if session_tx_for_reader
+                        .send(SessionMsg::Bytes(chunk.to_vec()))
+                        .is_err()
+                    {
                         break;
                     }
                 }
                 Err(_) => break,
             }
         }
+        let _ = session_tx_for_reader.send(SessionMsg::Shutdown);
+    });
+
+    // Session thread: owns the ghostty Terminal (which is `!Send`).
+    // Single consumer of the SessionMsg channel — serialises bytes from the
+    // PTY, scroll requests from the frontend, and resize events.
+    let app_for_exit = app.clone();
+    std::thread::spawn(move || {
+        let mut session = match vt::Session::new(
+            cols,
+            rows,
+            writer_for_vt,
+            modes_for_vt,
+            app_for_exit.clone(),
+            rid,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("ghostty vt session init failed: {e:#}");
+                return;
+            }
+        };
+
+        let emit_frame = |frame_result: Result<Option<Frame>>| -> bool {
+            match frame_result {
+                Ok(Some(frame)) => events.send(PtyEvent::Frame(frame)).is_ok(),
+                Ok(None) => true,
+                Err(e) => {
+                    eprintln!("ghostty session error: {e:#}");
+                    true
+                }
+            }
+        };
+
+        while let Ok(msg) = session_rx.recv() {
+            match msg {
+                SessionMsg::Bytes(b) => {
+                    if !emit_frame(session.feed(&b)) {
+                        break;
+                    }
+                }
+                SessionMsg::Scroll(delta) => {
+                    if !emit_frame(session.scroll_viewport(delta)) {
+                        break;
+                    }
+                }
+                SessionMsg::Resize { cols, rows } => {
+                    if let Err(e) = session.resize(cols, rows) {
+                        eprintln!("ghostty resize error: {e:#}");
+                    }
+                }
+                SessionMsg::Shutdown => break,
+            }
+        }
+
         reap(&child_for_reader);
         let _ = events.send(PtyEvent::Exit);
-        let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
+        let _ = tauri::Emitter::emit(
+            &app_for_exit,
+            "pty:exit",
+            &serde_json::json!({ "rid": rid }),
+        );
     });
 
     Ok(rid)
@@ -263,6 +363,9 @@ pub fn pty_resize(app: AppHandle, rid: ResourceId, cols: u16, rows: u16) -> Comm
             pixel_height: 0,
         })
         .context("failed to resize pty")?;
+    let _ = handle
+        .session_sender()
+        .send(SessionMsg::Resize { cols, rows });
     Ok(())
 }
 
@@ -275,7 +378,14 @@ pub fn pty_close(app: AppHandle, rid: ResourceId) -> CommandResult<()> {
     if let Some(child) = handle.child.lock().unwrap().as_mut() {
         let _ = child.kill();
     }
+    let _ = handle.session_sender().send(SessionMsg::Shutdown);
     drop(handle);
     let _ = app.resources_table().close(rid);
     Ok(())
+}
+
+/// Internal helper for `input::pty_scroll` to push a scroll delta into the
+/// session thread without touching the channel type publicly.
+pub fn dispatch_scroll(handle: &PtyHandle, delta: isize) {
+    let _ = handle.session_sender().send(SessionMsg::Scroll(delta));
 }
