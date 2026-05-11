@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
-import { installMenu } from "@/menu";
+import { installMenu } from "@/lib/menu";
 import { subscribeTabs, useTabsStore } from "@/stores/tabs";
 
 export function useTabsLifecycle(): void {
