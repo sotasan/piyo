@@ -22,6 +22,16 @@
 - 🌈 Full Unicode and emoji width handling
 - 🎯 Live macOS accent color sync
 
+## Building from source
+
+The Rust side links against [libghostty-vt](https://github.com/uzaaft/libghostty-rs),
+which builds the ghostty terminal library from source at compile time and
+requires **Zig 0.15.2**. With [`mise`](https://mise.jdx.dev):
+
+```sh
+mise use -g zig@0.15.2
+```
+
 ## Installation
 
 ### Homebrew

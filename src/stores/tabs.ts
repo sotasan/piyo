@@ -2,7 +2,46 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
+/** RGB color tuple, 0–255. */
+export type Rgb = [number, number, number];
+
+/** A single cell in a [`GhosttyFrame`]. */
+export type GhosttyCell = {
+    text: string;
+    fg: Rgb | null;
+    bg: Rgb | null;
+    /** Bit flags: 1=bold, 2=italic, 4=underline, 8=inverse, 16=faint,
+     *  32=strikethrough, 64=blink, 128=invisible. */
+    flags: number;
+};
+
+export type GhosttyRow = {
+    y: number;
+    cells: GhosttyCell[];
+};
+
+export type GhosttyCursor = {
+    x: number;
+    y: number;
+    visible: boolean;
+    blinking: boolean;
+    /** 0=block, 1=block_hollow, 2=underline, 3=bar. */
+    style: 0 | 1 | 2 | 3;
+};
+
+/** Snapshot from libghostty-vt of the dirty parts of the terminal grid. */
+export type GhosttyFrame = {
+    cols: number;
+    rows: number;
+    background: Rgb;
+    foreground: Rgb;
+    /** If true, the renderer should clear and reapply every row in `dirty`. */
+    full: boolean;
+    cursor: GhosttyCursor | null;
+    dirty: GhosttyRow[];
+};
+
+export type PtyEvent = { kind: "frame"; data: GhosttyFrame } | { kind: "exit" };
 
 export type Tab = {
     id: number;
