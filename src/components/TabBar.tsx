@@ -9,7 +9,7 @@ import {
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { useFileIcon } from "@/hooks/icon";
+import { useFileIcon } from "@/hooks/useFileIcon";
 
 type TabSummary = { id: number; title: string; cwd: string | null };
 
