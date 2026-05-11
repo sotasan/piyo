@@ -9,7 +9,9 @@ import {
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type TabSummary = { id: number; title: string };
+import { useFileIcon } from "@/hooks/icon";
+
+type TabSummary = { id: number; title: string; cwd: string | null };
 
 type Props = {
     tabs: TabSummary[];
@@ -33,6 +35,7 @@ function SortableTab({
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: tab.id,
     });
+    const icon = useFileIcon(tab.cwd ?? "", 32);
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -50,13 +53,20 @@ function SortableTab({
             {...listeners}
             className={[
                 "group relative flex-1 min-w-[60px] max-w-[200px] h-7 rounded-md",
-                "flex items-center justify-center px-3 text-xs select-none",
+                "flex items-center justify-center px-6 text-xs select-none",
                 "transition-colors",
                 isActive
                     ? "bg-accent-dark/40 text-foreground"
                     : "text-foreground/60 hover:bg-accent-dark/20",
             ].join(" ")}
         >
+            {icon && (
+                <img
+                    src={icon}
+                    alt=""
+                    className="pointer-events-none absolute top-1/2 left-1 size-4 -translate-y-1/2"
+                />
+            )}
             <span className="pointer-events-none truncate">{tab.title || "…"}</span>
             <span
                 role="button"

@@ -9,6 +9,7 @@ import SidebarToggle from "@/components/SidebarToggle";
 import TabBar from "@/components/TabBar";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
+import { useFileIcon } from "@/hooks/icon";
 import { useTabsLifecycle } from "@/hooks/useTabsLifecycle";
 import { useTabsStore } from "@/stores/tabs";
 
@@ -30,6 +31,7 @@ function App() {
     useTabsLifecycle();
     const tabs = useTabsStore((s) => s.tabs);
     const activeId = useTabsStore((s) => s.activeId);
+    const cwds = useTabsStore((s) => s.cwds);
     const activate = useTabsStore((s) => s.activate);
     const closeTab = useTabsStore((s) => s.close);
     const reorder = useTabsStore((s) => s.reorder);
@@ -72,6 +74,8 @@ function App() {
     };
 
     const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
+    const activeCwd = activeId !== null ? (cwds.get(activeId) ?? "") : "";
+    const activeIcon = useFileIcon(activeCwd, 32);
 
     return (
         <div className="relative h-full w-full bg-accent-dark/30">
@@ -117,7 +121,11 @@ function App() {
                 {tabs.length >= 2 ? (
                     <motion.div className="absolute inset-y-0 right-0" style={{ left: titleLeft }}>
                         <TabBar
-                            tabs={tabs.map(({ id, title }) => ({ id, title }))}
+                            tabs={tabs.map(({ id, title }) => ({
+                                id,
+                                title,
+                                cwd: cwds.get(id) ?? null,
+                            }))}
                             activeId={activeId}
                             onActivate={activate}
                             onClose={closeTab}
@@ -126,9 +134,10 @@ function App() {
                     </motion.div>
                 ) : (
                     <motion.div
-                        className="pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center"
+                        className="pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center gap-2"
                         style={{ left: titleLeft }}
                     >
+                        {activeIcon && <img src={activeIcon} alt="" className="h-4 w-4" />}
                         <span className="text-sm text-foreground select-none">{activeTitle}</span>
                     </motion.div>
                 )}
