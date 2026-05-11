@@ -10,8 +10,9 @@ import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 
 import { useFileIcon } from "@/hooks/useFileIcon";
+import { useTabsStore } from "@/stores/tabs";
 
-type TabSummary = { id: number; title: string; cwd: string | null };
+type TabSummary = { id: number; title: string };
 
 type Props = {
     tabs: TabSummary[];
@@ -21,21 +22,19 @@ type Props = {
     onReorder: (oldIndex: number, newIndex: number) => void;
 };
 
-function SortableTab({
-    tab,
-    isActive,
-    onActivate,
-    onClose,
-}: {
+type SortableTabProps = {
     tab: TabSummary;
     isActive: boolean;
     onActivate: (id: number) => void;
     onClose: (id: number) => void;
-}) {
+};
+
+function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: tab.id,
     });
-    const icon = useFileIcon(tab.cwd ?? "", 32);
+    const cwd = useTabsStore((s) => s.cwds.get(tab.id) ?? "");
+    const icon = useFileIcon(cwd, 32);
 
     const style = {
         transform: CSS.Transform.toString(transform),

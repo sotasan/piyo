@@ -2,13 +2,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-import type { PtyEvent } from "@/components/Terminal";
+export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
 export type Tab = {
     id: number;
     title: string;
-    channel: Channel<PtyEvent>;
 };
+
+const tabChannels = new Map<number, Channel<PtyEvent>>();
+const tabHandlers = new Map<number, (event: PtyEvent) => void>();
 
 interface TabsStore {
     tabs: Tab[];
@@ -25,6 +27,7 @@ interface TabsStore {
     selectNext: () => void;
     showAtIndex: (index: number) => void;
     setDims: (cols: number, rows: number) => void;
+    subscribeToTab: (rid: number, handler: (event: PtyEvent) => void) => () => void;
 
     handleTitle: (rid: number, title: string) => void;
     handleCwd: (rid: number, cwd: string) => void;
@@ -41,8 +44,10 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         const channel = new Channel<PtyEvent>();
         const { cols, rows } = get().dims;
         const rid = await invoke<number>("pty_spawn", { events: channel, cols, rows, cwd });
+        channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
+        tabChannels.set(rid, channel);
         set((s) => ({
-            tabs: [...s.tabs, { id: rid, title: "", channel }],
+            tabs: [...s.tabs, { id: rid, title: "" }],
             activeId: rid,
         }));
         return rid;
@@ -89,6 +94,13 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
 
     setDims: (cols, rows) => set({ dims: { cols, rows } }),
 
+    subscribeToTab: (rid, handler) => {
+        tabHandlers.set(rid, handler);
+        return () => {
+            if (tabHandlers.get(rid) === handler) tabHandlers.delete(rid);
+        };
+    },
+
     handleTitle: (rid, title) =>
         set((s) => ({
             tabs: s.tabs.map((t) => (t.id === rid ? { ...t, title } : t)),
@@ -103,6 +115,8 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
 
     handleExit: (rid) =>
         set((s) => {
+            tabChannels.delete(rid);
+            tabHandlers.delete(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
