@@ -19,5 +19,21 @@
     },
     "terminal": {
         "processExited": "[process exited]"
+    },
+    "menu": {
+        "file": "File",
+        "edit": "Edit",
+        "view": "View",
+        "window": "Window",
+        "help": "Help",
+        "about": "About {{name}}",
+        "hide": "Hide {{name}}",
+        "quit": "Quit {{name}}",
+        "zoom": "Zoom",
+        "newTab": "New Tab",
+        "closeTab": "Close Tab",
+        "selectPrevTab": "Select Previous Tab",
+        "selectNextTab": "Select Next Tab",
+        "showTab": "Show Tab {{index}}"
     }
 }
