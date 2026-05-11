@@ -19,5 +19,21 @@
     },
     "terminal": {
         "processExited": "[Prozess beendet]"
+    },
+    "menu": {
+        "file": "Ablage",
+        "edit": "Bearbeiten",
+        "view": "Darstellung",
+        "window": "Fenster",
+        "help": "Hilfe",
+        "about": "Über {{name}}",
+        "hide": "{{name}} ausblenden",
+        "quit": "{{name}} beenden",
+        "zoom": "Zoomen",
+        "newTab": "Neuer Tab",
+        "closeTab": "Tab schließen",
+        "selectPrevTab": "Vorherigen Tab auswählen",
+        "selectNextTab": "Nächsten Tab auswählen",
+        "showTab": "Tab {{index}} anzeigen"
     }
 }

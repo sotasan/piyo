@@ -19,5 +19,21 @@
     },
     "terminal": {
         "processExited": "[进程已退出]"
+    },
+    "menu": {
+        "file": "文件",
+        "edit": "编辑",
+        "view": "显示",
+        "window": "窗口",
+        "help": "帮助",
+        "about": "关于 {{name}}",
+        "hide": "隐藏 {{name}}",
+        "quit": "退出 {{name}}",
+        "zoom": "缩放",
+        "newTab": "新建标签页",
+        "closeTab": "关闭标签页",
+        "selectPrevTab": "选择上一个标签页",
+        "selectNextTab": "选择下一个标签页",
+        "showTab": "显示标签页 {{index}}"
     }
 }
