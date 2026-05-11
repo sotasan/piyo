@@ -51,13 +51,20 @@ export async function installMenu(): Promise<() => void> {
             if (activeId !== null) close(activeId);
         },
     });
-    const shellMenu = await Submenu.new({
-        text: "Shell",
+    const fileMenu = await Submenu.new({
+        text: "File",
         items: [newTab, closeTab],
+    });
+
+    const fullscreen = await PredefinedMenuItem.new({ item: "Fullscreen" });
+    const viewMenu = await Submenu.new({
+        text: "View",
+        items: [fullscreen],
     });
 
     const minimize = await PredefinedMenuItem.new({ item: "Minimize" });
     const zoom = await PredefinedMenuItem.new({ item: "Maximize", text: "Zoom" });
+    const bringAllToFront = await PredefinedMenuItem.new({ item: "BringAllToFront" });
     const prevTab = await MenuItem.new({
         id: "prev-tab",
         text: "Select Previous Tab",
@@ -82,11 +89,26 @@ export async function installMenu(): Promise<() => void> {
     );
     const windowMenu = await Submenu.new({
         text: "Window",
-        items: [minimize, zoom, await sep(), prevTab, nextTab, await sep(), ...showTabItems],
+        items: [
+            minimize,
+            zoom,
+            await sep(),
+            bringAllToFront,
+            await sep(),
+            prevTab,
+            nextTab,
+            await sep(),
+            ...showTabItems,
+        ],
+    });
+
+    const helpMenu = await Submenu.new({
+        text: "Help",
+        items: [],
     });
 
     const menu = await Menu.new({
-        items: [piyoMenu, editMenu, shellMenu, windowMenu],
+        items: [piyoMenu, fileMenu, editMenu, viewMenu, windowMenu, helpMenu],
     });
     await menu.setAsAppMenu();
 
