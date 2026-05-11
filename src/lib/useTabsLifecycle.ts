@@ -4,10 +4,7 @@ import { useEffect } from "react";
 import { installMenu, type MenuState } from "@/menu";
 import { getNewTabCwd, subscribeTabs, useTabsStore } from "@/stores/tabs";
 
-// Owns the tab system's side effects so App.tsx can stay layout-only:
-// pty event subscriptions, app menu installation + menu-action wiring,
-// the initial tab spawn, and closing the window when the last tab exits.
-function TabsBridge() {
+export function useTabsLifecycle(): void {
     useEffect(() => {
         let cancelled = false;
         let unlistenPty: (() => void) | undefined;
@@ -51,7 +48,7 @@ function TabsBridge() {
             });
 
             await useTabsStore.getState().spawn(null);
-        })().catch((e) => console.error("tabs bridge startup failed", e));
+        })().catch((e) => console.error("tabs lifecycle startup failed", e));
 
         return () => {
             cancelled = true;
@@ -59,8 +56,4 @@ function TabsBridge() {
             unsubStore?.();
         };
     }, []);
-
-    return null;
 }
-
-export default TabsBridge;
