@@ -7,9 +7,9 @@ import CommandPalette from "@/components/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import TabBar from "@/components/TabBar";
-import TabsBridge from "@/components/TabsBridge";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
+import { useTabsLifecycle } from "@/lib/useTabsLifecycle";
 import { useTabsStore } from "@/stores/tabs";
 
 import "@/App.css";
@@ -27,6 +27,7 @@ function App() {
     const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
     const isAnimatingRef = useRef(false);
 
+    useTabsLifecycle();
     const tabs = useTabsStore((s) => s.tabs);
     const activeId = useTabsStore((s) => s.activeId);
     const activate = useTabsStore((s) => s.activate);
@@ -74,7 +75,6 @@ function App() {
 
     return (
         <div className="relative h-full w-full bg-accent-dark/30">
-            <TabsBridge />
             <Group className="h-full" orientation="horizontal">
                 <Panel
                     panelRef={sidebarRef}
