@@ -94,12 +94,12 @@ export async function installMenu(): Promise<() => void> {
         const { tabs, activeId } = useTabsStore.getState();
         const hasActive = activeId !== null;
         const has2Plus = tabs.length >= 2;
-        await closeTab.setEnabled(hasActive);
-        await prevTab.setEnabled(has2Plus);
-        await nextTab.setEnabled(has2Plus);
-        for (let i = 0; i < showTabItems.length; i++) {
-            await showTabItems[i].setEnabled(i < tabs.length);
-        }
+        await Promise.all([
+            closeTab.setEnabled(hasActive),
+            prevTab.setEnabled(has2Plus),
+            nextTab.setEnabled(has2Plus),
+            ...showTabItems.map((item, i) => item.setEnabled(i < tabs.length)),
+        ]);
     };
     await refresh();
 
