@@ -52,6 +52,12 @@ function readThemeColors() {
 function Terminal({ rid, channel, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
+    const onResizeRef = useRef(onResize);
+    const activeRef = useRef(active);
+    useEffect(() => {
+        onResizeRef.current = onResize;
+        activeRef.current = active;
+    });
 
     useEffect(() => {
         const container = containerRef.current;
@@ -136,20 +142,20 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             term.onData((data) => invoke("pty_write", { rid, data }));
             term.onResize(({ cols, rows }) => {
                 invoke("pty_resize", { rid, cols, rows });
-                onResize?.(cols, rows);
+                onResizeRef.current?.(cols, rows);
             });
 
             // backend-side cols/rows were set by the spawn call in App; resync just in case
             invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
 
-            if (active) term.focus();
+            if (activeRef.current) term.focus();
         })();
 
         return () => {
             ac.abort();
             dispose?.();
         };
-    }, []);
+    }, [rid, channel]);
 
     useEffect(() => {
         if (active) termRef.current?.focus();
