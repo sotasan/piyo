@@ -9,6 +9,7 @@ export async function installMenu(): Promise<() => void> {
         item: { About: null },
         text: `About ${appName}`,
     });
+    const services = await PredefinedMenuItem.new({ item: "Services" });
     const hideItem = await PredefinedMenuItem.new({ item: "Hide", text: `Hide ${appName}` });
     const hideOthers = await PredefinedMenuItem.new({ item: "HideOthers" });
     const showAll = await PredefinedMenuItem.new({ item: "ShowAll" });
@@ -17,7 +18,17 @@ export async function installMenu(): Promise<() => void> {
 
     const piyoMenu = await Submenu.new({
         text: appName,
-        items: [aboutItem, await sep(), hideItem, hideOthers, showAll, await sep(), quitItem],
+        items: [
+            aboutItem,
+            await sep(),
+            services,
+            await sep(),
+            hideItem,
+            hideOthers,
+            showAll,
+            await sep(),
+            quitItem,
+        ],
     });
 
     const undo = await PredefinedMenuItem.new({ item: "Undo" });
@@ -28,7 +39,7 @@ export async function installMenu(): Promise<() => void> {
     const selectAll = await PredefinedMenuItem.new({ item: "SelectAll" });
     const editMenu = await Submenu.new({
         text: "Edit",
-        items: [undo, redo, await sep(), cut, copy, paste, await sep(), selectAll],
+        items: [undo, redo, await sep(), cut, copy, paste, selectAll],
     });
 
     const newTab = await MenuItem.new({
@@ -53,7 +64,7 @@ export async function installMenu(): Promise<() => void> {
     });
     const fileMenu = await Submenu.new({
         text: "File",
-        items: [newTab, closeTab],
+        items: [newTab, await sep(), closeTab],
     });
 
     const fullscreen = await PredefinedMenuItem.new({ item: "Fullscreen" });
