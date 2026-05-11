@@ -57,7 +57,7 @@ function SortableTab({
                     : "text-foreground/60 hover:bg-accent-dark/20",
             ].join(" ")}
         >
-            <span className="truncate pointer-events-none">{tab.title || "…"}</span>
+            <span className="pointer-events-none truncate">{tab.title || "…"}</span>
             <span
                 role="button"
                 aria-label="Close tab"
@@ -93,7 +93,7 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     return (
         <div
             data-tauri-drag-region
-            className="absolute inset-x-0 top-0 h-11 flex items-center px-1 gap-1"
+            className="absolute inset-x-0 top-0 flex h-11 items-center gap-1 px-1"
         >
             <DndContext
                 sensors={sensors}

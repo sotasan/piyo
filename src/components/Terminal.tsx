@@ -1,7 +1,5 @@
-import { useEffect, useRef } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Terminal as XtermTerminal } from "@xterm/xterm";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
@@ -10,7 +8,11 @@ import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Terminal as XtermTerminal } from "@xterm/xterm";
+import { useEffect, useRef } from "react";
+
 import "@xterm/xterm/css/xterm.css";
+import { i18next } from "@/lib/i18n";
 
 export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
@@ -128,7 +130,8 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             Reflect.set(channel, "onmessage", (event: PtyEvent) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
-                else if (event.kind === "exit") term.write("\r\n[process exited]\r\n");
+                else if (event.kind === "exit")
+                    term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
             });
             term.onData((data) => invoke("pty_write", { rid, data }));
             term.onResize(({ cols, rows }) => {

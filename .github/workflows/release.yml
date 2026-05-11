@@ -8,11 +8,14 @@ permissions:
 
 jobs:
     release:
+        name: Build & release
         runs-on: macos-26
 
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
             - name: Setup Bun
               uses: oven-sh/setup-bun@v2
@@ -38,6 +41,13 @@ jobs:
                   version=$(awk -F\" '/^version/ {print $2; exit}' src-tauri/Cargo.toml)
                   echo "value=v${version}" >> "$GITHUB_OUTPUT"
 
+            - name: Generate release notes
+              id: changelog
+              uses: sotasan/git-cliff-action@fix-macos-stat
+              with:
+                  config: cliff.toml
+                  args: --unreleased --tag ${{ steps.tag.outputs.value }}
+
             - name: Build & release
               uses: tauri-apps/tauri-action@v0
               env:
@@ -47,7 +57,26 @@ jobs:
               with:
                   tagName: ${{ steps.tag.outputs.value }}
                   releaseName: "Piyo ${{ steps.tag.outputs.value }}"
+                  releaseBody: ${{ steps.changelog.outputs.content }}
                   releaseDraft: false
                   prerelease: false
                   includeUpdaterJson: true
                   args: --target aarch64-apple-darwin --bundles app,dmg
+
+    homebrew:
+        name: Bump cask
+        needs: release
+        runs-on: macos-26
+        steps:
+            - name: Setup Homebrew
+              uses: Homebrew/actions/setup-homebrew@main
+
+            - name: Tap
+              run: brew tap sotasan/homebrew-tap
+
+            - name: Bump cask
+              uses: Homebrew/actions/bump-packages@main
+              with:
+                  token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  casks: piyo
+                  fork: false

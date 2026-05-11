@@ -1,26 +1,18 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { locale } from "@tauri-apps/plugin-os";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask } from "@tauri-apps/plugin-dialog";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check } from "@tauri-apps/plugin-updater";
+
 import "@fontsource-variable/jetbrains-mono/index.css";
 import App from "@/App";
+import { initI18n } from "@/lib/i18n";
+import { applyThemeCss } from "@/lib/theme";
+import { checkForUpdates } from "@/lib/updater";
+import { applyAccent, subscribeAccent } from "@/stores/accent";
 
-const [themeCss, accent] = await Promise.all([
-    invoke<string>("get_theme_css"),
-    invoke<string>("get_accent_color"),
-]);
-const style = document.createElement("style");
-style.textContent = themeCss;
-document.head.appendChild(style);
-document.documentElement.style.setProperty("--theme-accent", accent);
-
-listen<string>("accent:changed", (e) => {
-    document.documentElement.style.setProperty("--theme-accent", e.payload);
-});
+const [, , detectedLocale] = await Promise.all([applyThemeCss(), applyAccent(), locale()]);
+await initI18n(detectedLocale);
+void subscribeAccent();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
@@ -30,21 +22,4 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 
 await getCurrentWindow().show();
 
-if (import.meta.env.PROD) {
-    void (async () => {
-        try {
-            const update = await check();
-            if (!update) return;
-            const install = await ask(`Piyo ${update.version} is available. Install now?`, {
-                title: "Update available",
-                kind: "info",
-                okLabel: "Install",
-                cancelLabel: "Later",
-            });
-            if (install) {
-                await update.downloadAndInstall();
-                await relaunch();
-            }
-        } catch {}
-    })();
-}
+if (import.meta.env.PROD) void checkForUpdates();
