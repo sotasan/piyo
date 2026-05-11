@@ -21,7 +21,7 @@
         "processExited": "[Prozess beendet]"
     },
     "menu": {
-        "file": "Ablage",
+        "file": "Datei",
         "edit": "Bearbeiten",
         "view": "Darstellung",
         "window": "Fenster",
