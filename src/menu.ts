@@ -1,22 +1,8 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
-export type MenuState = {
-    tabs: { id: number; title: string }[];
-    activeId: number | null;
-};
+import { useTabsStore } from "@/stores/tabs";
 
-export type MenuActions = {
-    newTab: () => void;
-    closeActiveTab: () => void;
-    selectPrevTab: () => void;
-    selectNextTab: () => void;
-    showTabAtIndex: (index: number) => void;
-};
-
-export async function installMenu(
-    getState: () => MenuState,
-    actions: MenuActions,
-): Promise<() => Promise<void>> {
+export async function installMenu(): Promise<() => void> {
     const appName = "Piyo";
 
     const aboutItem = await PredefinedMenuItem.new({
@@ -49,13 +35,21 @@ export async function installMenu(
         id: "new-tab",
         text: "New Tab",
         accelerator: "CmdOrCtrl+T",
-        action: () => actions.newTab(),
+        action: () => {
+            useTabsStore
+                .getState()
+                .spawnSibling()
+                .catch((e) => console.error("spawn failed", e));
+        },
     });
     const closeTab = await MenuItem.new({
         id: "close-tab",
         text: "Close Tab",
         accelerator: "CmdOrCtrl+W",
-        action: () => actions.closeActiveTab(),
+        action: () => {
+            const { activeId, close } = useTabsStore.getState();
+            if (activeId !== null) close(activeId);
+        },
     });
     const shellMenu = await Submenu.new({
         text: "Shell",
@@ -68,13 +62,13 @@ export async function installMenu(
         id: "prev-tab",
         text: "Select Previous Tab",
         accelerator: "Shift+CmdOrCtrl+BracketLeft",
-        action: () => actions.selectPrevTab(),
+        action: () => useTabsStore.getState().selectPrev(),
     });
     const nextTab = await MenuItem.new({
         id: "next-tab",
         text: "Select Next Tab",
         accelerator: "Shift+CmdOrCtrl+BracketRight",
-        action: () => actions.selectNextTab(),
+        action: () => useTabsStore.getState().selectNext(),
     });
     const showTabItems = await Promise.all(
         Array.from({ length: 9 }, (_, i) =>
@@ -82,7 +76,7 @@ export async function installMenu(
                 id: `show-tab-${i + 1}`,
                 text: `Show Tab ${i + 1}`,
                 accelerator: `CmdOrCtrl+${i + 1}`,
-                action: () => actions.showTabAtIndex(i),
+                action: () => useTabsStore.getState().showAtIndex(i),
             }),
         ),
     );
@@ -97,7 +91,7 @@ export async function installMenu(
     await menu.setAsAppMenu();
 
     const refresh = async () => {
-        const { tabs, activeId } = getState();
+        const { tabs, activeId } = useTabsStore.getState();
         const hasActive = activeId !== null;
         const has2Plus = tabs.length >= 2;
         await closeTab.setEnabled(hasActive);
@@ -108,5 +102,12 @@ export async function installMenu(
         }
     };
     await refresh();
-    return refresh;
+
+    const unsub = useTabsStore.subscribe((state, prev) => {
+        if (state.tabs !== prev.tabs || state.activeId !== prev.activeId) {
+            refresh().catch((e) => console.error("menu refresh failed", e));
+        }
+    });
+
+    return unsub;
 }

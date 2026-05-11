@@ -17,6 +17,7 @@ interface TabsStore {
     dims: { cols: number; rows: number };
 
     spawn: (cwd: string | null) => Promise<number>;
+    spawnSibling: () => Promise<number>;
     close: (rid: number) => void;
     reorder: (oldIndex: number, newIndex: number) => void;
     activate: (rid: number) => void;
@@ -45,6 +46,11 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             activeId: rid,
         }));
         return rid;
+    },
+
+    spawnSibling: () => {
+        const { activeId, cwds, spawn } = get();
+        return spawn(activeId !== null ? (cwds.get(activeId) ?? null) : null);
     },
 
     close: (rid) => {
@@ -108,11 +114,6 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             return { tabs: next, activeId, cwds };
         }),
 }));
-
-export function getNewTabCwd(): string | null {
-    const { activeId, cwds } = useTabsStore.getState();
-    return activeId !== null ? (cwds.get(activeId) ?? null) : null;
-}
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
     const unlistens = await Promise.all([
