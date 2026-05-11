@@ -105,15 +105,21 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
-            const oldIdx = s.tabs.findIndex((t) => t.id === rid);
             const next = s.tabs.filter((t) => t.id !== rid);
-            const activeId =
-                s.activeId !== rid
-                    ? s.activeId
-                    : (s.tabs[oldIdx + 1]?.id ?? next[next.length - 1]?.id ?? null);
-            return { tabs: next, activeId, cwds };
+            return { tabs: next, activeId: pickNextActive(rid, s.tabs, next, s.activeId), cwds };
         }),
 }));
+
+function pickNextActive(
+    closingRid: number,
+    prevTabs: Tab[],
+    nextTabs: Tab[],
+    currentActiveId: number | null,
+): number | null {
+    if (currentActiveId !== closingRid) return currentActiveId;
+    const closingIdx = prevTabs.findIndex((t) => t.id === closingRid);
+    return prevTabs[closingIdx + 1]?.id ?? nextTabs[nextTabs.length - 1]?.id ?? null;
+}
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
     const unlistens = await Promise.all([

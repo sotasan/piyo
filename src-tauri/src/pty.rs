@@ -26,6 +26,8 @@ impl serde::Serialize for CommandError {
 
 type CommandResult<T> = Result<T, CommandError>;
 
+const READ_BUF_SIZE: usize = 4096;
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind", content = "data")]
 pub enum PtyEvent {
@@ -201,7 +203,7 @@ pub async fn pty_spawn(
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
         let mut performer = OscPerformer::new(app_for_osc.clone(), rid);
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; READ_BUF_SIZE];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,

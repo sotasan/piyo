@@ -31,9 +31,9 @@ impl OscPerformer {
             .unwrap_or(false)
     }
 
-    fn dispatch_agent(&self, name: &str, subcommand: &str, payload: &str) {
-        if let ("claude", "stop") = (name, subcommand) {
-            self.handle_claude_stop(payload);
+    fn dispatch_agent(&self, action: AgentAction, payload: &str) {
+        match action {
+            AgentAction::ClaudeStop => self.handle_claude_stop(payload),
         }
     }
 
@@ -103,10 +103,26 @@ impl Perform for OscPerformer {
                 let Some(subcommand) = utf8_param(params, 2) else {
                     return;
                 };
+                let Some(action) = AgentAction::parse(&name, &subcommand) else {
+                    return;
+                };
                 let payload = join_payload(params, 3).unwrap_or_default();
-                self.dispatch_agent(&name, &subcommand, &payload);
+                self.dispatch_agent(action, &payload);
             }
             _ => {}
+        }
+    }
+}
+
+enum AgentAction {
+    ClaudeStop,
+}
+
+impl AgentAction {
+    fn parse(name: &str, subcommand: &str) -> Option<Self> {
+        match (name, subcommand) {
+            ("claude", "stop") => Some(Self::ClaudeStop),
+            _ => None,
         }
     }
 }
