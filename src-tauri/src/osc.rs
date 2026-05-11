@@ -1,5 +1,7 @@
+use percent_encoding::percent_decode_str;
 use tauri::{AppHandle, Emitter, Manager, ResourceId};
 use tauri_plugin_notification::NotificationExt;
+use url::Url;
 use vte::Perform;
 
 pub struct OscPerformer {
@@ -127,39 +129,15 @@ fn join_payload(params: &[&[u8]], from: usize) -> Option<String> {
 /// will be incorrectly decoded. In practice this is rare on Unix.
 /// Nushell paths are properly URI-encoded via `url encode`.
 fn parse_file_uri(uri: &str) -> Option<String> {
-    let rest = uri.strip_prefix("file://")?;
-    // rest = "host/path" — drop everything up to and including the first '/'
-    let slash = rest.find('/')?;
-    let raw = &rest[slash..];
-    Some(percent_decode(raw))
-}
-
-fn percent_decode(s: &str) -> String {
-    let mut out = Vec::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && i + 2 < bytes.len()
-            && let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
-        {
-            out.push((h << 4) | l);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
+    let url = Url::parse(uri).ok()?;
+    if url.scheme() != "file" {
+        return None;
     }
-    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned())
-}
-
-fn hex(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
+    let path = url.path();
+    if path.is_empty() {
+        return None;
     }
+    Some(percent_decode_str(path).decode_utf8_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -182,8 +160,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_no_path() {
-        assert_eq!(parse_file_uri("file://host"), None);
+    fn parse_authority_only_resolves_to_root() {
+        assert_eq!(parse_file_uri("file://host"), Some("/".into()));
     }
 
     #[test]
