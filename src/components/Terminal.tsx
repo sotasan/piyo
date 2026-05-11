@@ -1,4 +1,4 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -9,18 +9,23 @@ import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { i18next } from "@/lib/i18n";
-
-type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
+import { useTabsStore } from "@/stores/tabs";
 
 type AppConfig = {
     font_family: string;
     font_size: number;
     padding: string;
     theme: string;
+};
+
+type Props = {
+    rid: number;
+    active: boolean;
+    onResize?: (cols: number, rows: number) => void;
 };
 
 const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
@@ -42,8 +47,16 @@ function readThemeColors() {
     };
 }
 
-function Terminal() {
+function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const termRef = useRef<XtermTerminal | null>(null);
+
+    const handleResize = useEffectEvent((cols: number, rows: number) => {
+        onResize?.(cols, rows);
+    });
+    const focusIfActive = useEffectEvent((term: XtermTerminal) => {
+        if (active) term.focus();
+    });
 
     useEffect(() => {
         const container = containerRef.current;
@@ -51,6 +64,7 @@ function Terminal() {
 
         const ac = new AbortController();
         let dispose: (() => void) | undefined;
+        let unsubChannel: (() => void) | undefined;
 
         (async () => {
             const config = await invoke<AppConfig>("get_config");
@@ -65,10 +79,11 @@ function Terminal() {
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
             });
+            termRef.current = term;
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
                     term.write("\x1b[3J");
-                    invoke("pty_write", { data: "\x0c" });
+                    invoke("pty_write", { rid, data: "\x0c" });
                     return false;
                 }
                 return true;
@@ -102,6 +117,7 @@ function Terminal() {
             dispose = () => {
                 ro.disconnect();
                 term.dispose();
+                termRef.current = null;
             };
 
             await webFonts.loadFonts([FALLBACK_FONTS[0]]);
@@ -113,29 +129,47 @@ function Terminal() {
                 term.loadAddon(new WebglAddon());
             } catch {}
             fit.fit();
-            term.focus();
             ro.observe(container);
 
-            const events = new Channel<PtyEvent>();
-            events.onmessage = (event) => {
+            unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
                 else if (event.kind === "exit")
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
-            };
-            term.onData((data) => invoke("pty_write", { data }));
-            term.onResize(({ cols, rows }) => invoke("pty_resize", { cols, rows }));
+            });
+            term.onData((data) => invoke("pty_write", { rid, data }));
+            term.onResize(({ cols, rows }) => {
+                invoke("pty_resize", { rid, cols, rows });
+                handleResize(cols, rows);
+            });
 
-            await invoke("pty_spawn", { events, cols: term.cols, rows: term.rows });
+            invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
+
+            focusIfActive(term);
         })();
 
         return () => {
             ac.abort();
+            unsubChannel?.();
             dispose?.();
         };
-    }, []);
+    }, [rid]);
 
-    return <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-background" />;
+    useEffect(() => {
+        if (active) termRef.current?.focus();
+    }, [active]);
+
+    return (
+        <div
+            className="absolute inset-0 overflow-hidden bg-background"
+            style={{
+                visibility: active ? "visible" : "hidden",
+                pointerEvents: active ? "auto" : "none",
+            }}
+        >
+            <div ref={containerRef} className="absolute inset-0 overflow-hidden" />
+        </div>
+    );
 }
 
 export default Terminal;

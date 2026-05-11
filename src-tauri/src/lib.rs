@@ -11,7 +11,7 @@ use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibranc
 
 use accent::get_accent_color;
 use config::get_config;
-use pty::{PtyState, pty_resize, pty_spawn, pty_write};
+use pty::{pty_close, pty_resize, pty_spawn, pty_write};
 use theme::get_theme_css;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,7 +25,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            app.manage(PtyState::default());
             app.manage(config::load());
 
             #[cfg(target_os = "macos")]
@@ -51,6 +50,7 @@ pub fn run() {
             pty_spawn,
             pty_write,
             pty_resize,
+            pty_close,
             get_config,
             get_theme_css,
             get_accent_color

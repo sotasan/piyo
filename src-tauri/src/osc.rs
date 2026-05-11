@@ -1,14 +1,17 @@
-use tauri::{AppHandle, Emitter, Manager};
+use percent_encoding::percent_decode_str;
+use tauri::{AppHandle, Emitter, Manager, ResourceId};
 use tauri_plugin_notification::NotificationExt;
+use url::Url;
 use vte::Perform;
 
 pub struct OscPerformer {
     app: AppHandle,
+    rid: ResourceId,
 }
 
 impl OscPerformer {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app }
+    pub fn new(app: AppHandle, rid: ResourceId) -> Self {
+        Self { app, rid }
     }
 
     fn notify(&self, title: &str, body: &str) {
@@ -28,9 +31,9 @@ impl OscPerformer {
             .unwrap_or(false)
     }
 
-    fn dispatch_agent(&self, name: &str, subcommand: &str, payload: &str) {
-        if let ("claude", "stop") = (name, subcommand) {
-            self.handle_claude_stop(payload);
+    fn dispatch_agent(&self, action: AgentAction, payload: &str) {
+        match action {
+            AgentAction::ClaudeStop => self.handle_claude_stop(payload),
         }
     }
 
@@ -57,7 +60,20 @@ impl Perform for OscPerformer {
         match code {
             b"0" | b"2" => {
                 if let Some(title) = join_payload(params, 1) {
-                    let _ = self.app.emit("pty:title", &title);
+                    let _ = self.app.emit(
+                        "pty:title",
+                        &serde_json::json!({ "rid": self.rid, "title": title }),
+                    );
+                }
+            }
+            b"7" => {
+                if let Some(uri) = join_payload(params, 1)
+                    && let Some(path) = parse_file_uri(&uri)
+                {
+                    let _ = self.app.emit(
+                        "pty:cwd",
+                        &serde_json::json!({ "rid": self.rid, "cwd": path }),
+                    );
                 }
             }
             b"9" => {
@@ -87,10 +103,26 @@ impl Perform for OscPerformer {
                 let Some(subcommand) = utf8_param(params, 2) else {
                     return;
                 };
+                let Some(action) = AgentAction::parse(&name, &subcommand) else {
+                    return;
+                };
                 let payload = join_payload(params, 3).unwrap_or_default();
-                self.dispatch_agent(&name, &subcommand, &payload);
+                self.dispatch_agent(action, &payload);
             }
             _ => {}
+        }
+    }
+}
+
+enum AgentAction {
+    ClaudeStop,
+}
+
+impl AgentAction {
+    fn parse(name: &str, subcommand: &str) -> Option<Self> {
+        match (name, subcommand) {
+            ("claude", "stop") => Some(Self::ClaudeStop),
+            _ => None,
         }
     }
 }
@@ -104,4 +136,16 @@ fn join_payload(params: &[&[u8]], from: usize) -> Option<String> {
         return None;
     }
     String::from_utf8(params[from..].join(b";".as_slice())).ok()
+}
+
+fn parse_file_uri(uri: &str) -> Option<String> {
+    let url = Url::parse(uri).ok()?;
+    if url.scheme() != "file" {
+        return None;
+    }
+    let path = url.path();
+    if path.is_empty() {
+        return None;
+    }
+    Some(percent_decode_str(path).decode_utf8_lossy().into_owned())
 }
