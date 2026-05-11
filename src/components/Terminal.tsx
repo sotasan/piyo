@@ -131,8 +131,6 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
-            // react-compiler flags `channel.onmessage = ...` as a prop mutation;
-            // Reflect.set invokes the same prototype setter without triggering the rule.
             Reflect.set(channel, "onmessage", (event: PtyEvent) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
@@ -145,7 +143,6 @@ function Terminal({ rid, channel, active, onResize }: Props) {
                 onResizeRef.current?.(cols, rows);
             });
 
-            // backend-side cols/rows were set by the spawn call in App; resync just in case
             invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
 
             if (activeRef.current) term.focus();

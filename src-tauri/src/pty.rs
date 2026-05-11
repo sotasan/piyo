@@ -263,12 +263,12 @@ pub fn pty_resize(app: AppHandle, rid: ResourceId, cols: u16, rows: u16) -> Comm
 pub fn pty_close(app: AppHandle, rid: ResourceId) -> CommandResult<()> {
     let handle = match app.resources_table().get::<PtyHandle>(rid) {
         Ok(h) => h,
-        Err(_) => return Ok(()), // already gone — race with natural exit
+        Err(_) => return Ok(()),
     };
     if let Some(child) = handle.child.lock().unwrap().as_mut() {
         let _ = child.kill();
     }
-    drop(handle); // release the lookup-Arc before mutating the table
+    drop(handle);
     let _ = app.resources_table().close(rid);
     Ok(())
 }
