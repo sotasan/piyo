@@ -89,16 +89,18 @@ function App() {
                 />
                 <Panel className="relative">
                     <div className="absolute top-11 right-2 bottom-2 left-2 overflow-hidden rounded-lg border border-border bg-background">
-                        {tabs.map((tab) => (
-                            <Terminal
-                                key={tab.id}
-                                rid={tab.id}
-                                active={tab.id === activeId}
-                                onResize={(cols, rows) => {
-                                    if (tab.id === activeId) setDims(cols, rows);
-                                }}
-                            />
-                        ))}
+                        {[...tabs]
+                            .sort((a, b) => a.id - b.id)
+                            .map((tab) => (
+                                <Terminal
+                                    key={tab.id}
+                                    rid={tab.id}
+                                    active={tab.id === activeId}
+                                    onResize={(cols, rows) => {
+                                        if (tab.id === activeId) setDims(cols, rows);
+                                    }}
+                                />
+                            ))}
                     </div>
                 </Panel>
             </Group>
