@@ -15,6 +15,7 @@ import { useTabsStore } from "@/stores/tabs";
 
 import "@/App.css";
 
+const TRAFFIC_LIGHTS_INSET_PX = 84;
 const DEFAULT_SIDEBAR_PX = 200;
 const SEPARATOR_PX = 4;
 const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
@@ -101,7 +102,10 @@ function App() {
                     </div>
                 </Panel>
             </Group>
-            <Titlebar className="absolute inset-x-0 top-0 z-10">
+            <Titlebar
+                className="absolute inset-x-0 top-0 z-10"
+                style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
+            >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (
                     <TabBar
