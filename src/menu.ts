@@ -13,10 +13,6 @@ export type MenuActions = {
     showTabAtIndex: (index: number) => void;
 };
 
-// Build and install the macOS menu. The state is read via `getState()` at
-// call time, so changes to tabs/activeId are reflected without rebuilding
-// the menu. Returns a function that re-evaluates the enabled-state of
-// state-dependent items; call it whenever tabs or activeId change.
 export async function installMenu(
     getState: () => MenuState,
     actions: MenuActions,

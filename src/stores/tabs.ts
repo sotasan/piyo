@@ -5,7 +5,7 @@ import { create } from "zustand";
 import type { PtyEvent } from "@/components/Terminal";
 
 export type Tab = {
-    id: number; // backend ResourceId
+    id: number;
     title: string;
     channel: Channel<PtyEvent>;
 };
@@ -101,9 +101,6 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             cwds.delete(rid);
             const oldIdx = s.tabs.findIndex((t) => t.id === rid);
             const next = s.tabs.filter((t) => t.id !== rid);
-            // Pick the tab originally to the right of the closed one; fall
-            // back to the new rightmost (i.e. the tab originally to the left
-            // when the closed tab was rightmost).
             const activeId =
                 s.activeId !== rid
                     ? s.activeId
@@ -112,13 +109,11 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         }),
 }));
 
-// Cwd to inherit when spawning a new tab from the menu.
 export function getNewTabCwd(): string | null {
     const { activeId, cwds } = useTabsStore.getState();
     return activeId !== null ? (cwds.get(activeId) ?? null) : null;
 }
 
-// Wire backend pty events into the store. Caller owns the unlisten.
 export async function subscribeTabs(): Promise<UnlistenFn> {
     const unlistens = await Promise.all([
         listen<{ rid: number; title: string }>("pty:title", (e) =>
