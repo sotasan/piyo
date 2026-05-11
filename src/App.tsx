@@ -9,7 +9,7 @@ import SidebarToggle from "@/components/SidebarToggle";
 import TabBar from "@/components/TabBar";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
-import { useTabsLifecycle } from "@/lib/useTabsLifecycle";
+import { useTabsLifecycle } from "@/hooks/useTabsLifecycle";
 import { useTabsStore } from "@/stores/tabs";
 
 import "@/App.css";
