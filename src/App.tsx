@@ -116,7 +116,7 @@ function App() {
                         onReorder={reorder}
                     />
                 ) : (
-                    <div className="pointer-events-none flex flex-1 items-center justify-center gap-2">
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2">
                         {activeIcon && <img src={activeIcon} alt="" className="h-4 w-4" />}
                         <span className="text-sm text-foreground select-none">{activeTitle}</span>
                     </div>
