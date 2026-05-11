@@ -15,7 +15,6 @@ import { useTabsStore } from "@/stores/tabs";
 
 import "@/App.css";
 
-const TRAFFIC_LIGHTS_INSET_PX = 84;
 const DEFAULT_SIDEBAR_PX = 200;
 const SEPARATOR_PX = 4;
 const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
@@ -37,7 +36,6 @@ function App() {
     const reorder = useTabsStore((s) => s.reorder);
     const setDims = useTabsStore((s) => s.setDims);
 
-    const titleLeft = useTransform(sizeMV, (v) => `${v}px`);
     const separatorWidth = useTransform(sizeMV, (v) => Math.min(SEPARATOR_PX, Math.max(0, v)));
 
     useMotionValueEvent(sizeMV, "change", (v) => {
@@ -113,33 +111,25 @@ function App() {
                     </div>
                 </Panel>
             </Group>
-            <Titlebar
-                className="absolute inset-x-0 top-0 z-10"
-                style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
-            >
+            <Titlebar className="absolute inset-x-0 top-0 z-10">
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (
-                    <motion.div className="absolute inset-y-0 right-0" style={{ left: titleLeft }}>
-                        <TabBar
-                            tabs={tabs.map(({ id, title }) => ({
-                                id,
-                                title,
-                                cwd: cwds.get(id) ?? null,
-                            }))}
-                            activeId={activeId}
-                            onActivate={activate}
-                            onClose={closeTab}
-                            onReorder={reorder}
-                        />
-                    </motion.div>
+                    <TabBar
+                        tabs={tabs.map(({ id, title }) => ({
+                            id,
+                            title,
+                            cwd: cwds.get(id) ?? null,
+                        }))}
+                        activeId={activeId}
+                        onActivate={activate}
+                        onClose={closeTab}
+                        onReorder={reorder}
+                    />
                 ) : (
-                    <motion.div
-                        className="pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center gap-2"
-                        style={{ left: titleLeft }}
-                    >
+                    <div className="pointer-events-none flex flex-1 items-center justify-center gap-2">
                         {activeIcon && <img src={activeIcon} alt="" className="h-4 w-4" />}
                         <span className="text-sm text-foreground select-none">{activeTitle}</span>
-                    </motion.div>
+                    </div>
                 )}
             </Titlebar>
             <CommandPalette />
