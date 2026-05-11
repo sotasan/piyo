@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
+
+import CommandPalette from "@/components/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import TabBar from "@/components/TabBar";
 import Terminal, { type PtyEvent } from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
 import { installMenu, type MenuState } from "@/menu";
+
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
@@ -191,7 +194,7 @@ function App() {
     const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
 
     return (
-        <div className="relative w-full h-full bg-accent-dark/30">
+        <div className="relative h-full w-full bg-accent-dark/30">
             <Group className="h-full" orientation="horizontal">
                 <Panel
                     panelRef={sidebarRef}
@@ -199,7 +202,7 @@ function App() {
                     minSize="0%"
                     maxSize="480px"
                     groupResizeBehavior="preserve-pixel-size"
-                    className="overflow-hidden relative"
+                    className="relative overflow-hidden"
                     onResize={handleSidebarResize}
                 >
                     <div className="absolute inset-0 top-11">
@@ -211,7 +214,7 @@ function App() {
                     style={{ width: separatorWidth, flexBasis: separatorWidth }}
                 />
                 <Panel className="relative">
-                    <div className="absolute top-11 right-2 bottom-2 left-2 bg-background rounded-lg overflow-hidden border border-border">
+                    <div className="absolute top-11 right-2 bottom-2 left-2 overflow-hidden rounded-lg border border-border bg-background">
                         {tabs.map((tab) => (
                             <Terminal
                                 key={tab.id}
@@ -250,13 +253,14 @@ function App() {
                     </motion.div>
                 ) : (
                     <motion.div
-                        className="absolute inset-y-0 right-0 flex items-center justify-center pointer-events-none"
+                        className="pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center"
                         style={{ left: titleLeft }}
                     >
-                        <span className="text-foreground text-sm select-none">{activeTitle}</span>
+                        <span className="text-sm text-foreground select-none">{activeTitle}</span>
                     </motion.div>
                 )}
             </Titlebar>
+            <CommandPalette />
         </div>
     );
 }

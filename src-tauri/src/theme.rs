@@ -6,7 +6,7 @@ use tauri::State;
 
 use crate::config::Configuration;
 
-const DEFAULT_THEME: &str = "default";
+const DEFAULT_THEME: &str = "rose-pine";
 
 #[derive(RustEmbed)]
 #[folder = "themes/"]
