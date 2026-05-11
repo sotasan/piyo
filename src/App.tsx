@@ -30,7 +30,9 @@ function App() {
     useTabsLifecycle();
     const tabs = useTabsStore((s) => s.tabs);
     const activeId = useTabsStore((s) => s.activeId);
-    const cwds = useTabsStore((s) => s.cwds);
+    const activeCwd = useTabsStore((s) =>
+        s.activeId !== null ? (s.cwds.get(s.activeId) ?? "") : "",
+    );
     const activate = useTabsStore((s) => s.activate);
     const closeTab = useTabsStore((s) => s.close);
     const reorder = useTabsStore((s) => s.reorder);
@@ -50,29 +52,18 @@ function App() {
     };
 
     const toggle = () => {
-        if (!collapsed) {
-            setCollapsed(true);
-            isAnimatingRef.current = true;
-            animate(sizeMV, 0, {
-                ...TWEEN,
-                onComplete: () => {
-                    isAnimatingRef.current = false;
-                },
-            });
-        } else {
-            setCollapsed(false);
-            isAnimatingRef.current = true;
-            animate(sizeMV, lastExpandedRef.current, {
-                ...TWEEN,
-                onComplete: () => {
-                    isAnimatingRef.current = false;
-                },
-            });
-        }
+        const next = !collapsed;
+        setCollapsed(next);
+        isAnimatingRef.current = true;
+        animate(sizeMV, next ? 0 : lastExpandedRef.current, {
+            ...TWEEN,
+            onComplete: () => {
+                isAnimatingRef.current = false;
+            },
+        });
     };
 
     const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
-    const activeCwd = activeId !== null ? (cwds.get(activeId) ?? "") : "";
     const activeIcon = useFileIcon(activeCwd, 32);
 
     return (
@@ -101,7 +92,6 @@ function App() {
                             <Terminal
                                 key={tab.id}
                                 rid={tab.id}
-                                channel={tab.channel}
                                 active={tab.id === activeId}
                                 onResize={(cols, rows) => {
                                     if (tab.id === activeId) setDims(cols, rows);
@@ -115,11 +105,7 @@ function App() {
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (
                     <TabBar
-                        tabs={tabs.map(({ id, title }) => ({
-                            id,
-                            title,
-                            cwd: cwds.get(id) ?? null,
-                        }))}
+                        tabs={tabs}
                         activeId={activeId}
                         onActivate={activate}
                         onClose={closeTab}

@@ -1,4 +1,4 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -9,12 +9,11 @@ import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { i18next } from "@/lib/i18n";
-
-export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
+import { useTabsStore } from "@/stores/tabs";
 
 type AppConfig = {
     font_family: string;
@@ -25,7 +24,6 @@ type AppConfig = {
 
 type Props = {
     rid: number;
-    channel: Channel<PtyEvent>;
     active: boolean;
     onResize?: (cols: number, rows: number) => void;
 };
@@ -49,14 +47,15 @@ function readThemeColors() {
     };
 }
 
-function Terminal({ rid, channel, active, onResize }: Props) {
+function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
-    const onResizeRef = useRef(onResize);
-    const activeRef = useRef(active);
-    useEffect(() => {
-        onResizeRef.current = onResize;
-        activeRef.current = active;
+
+    const handleResize = useEffectEvent((cols: number, rows: number) => {
+        onResize?.(cols, rows);
+    });
+    const focusIfActive = useEffectEvent((term: XtermTerminal) => {
+        if (active) term.focus();
     });
 
     useEffect(() => {
@@ -65,6 +64,7 @@ function Terminal({ rid, channel, active, onResize }: Props) {
 
         const ac = new AbortController();
         let dispose: (() => void) | undefined;
+        let unsubChannel: (() => void) | undefined;
 
         (async () => {
             const config = await invoke<AppConfig>("get_config");
@@ -131,7 +131,7 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
-            Reflect.set(channel, "onmessage", (event: PtyEvent) => {
+            unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
                 if (event.kind === "data") term.write(new Uint8Array(event.data));
                 else if (event.kind === "exit")
@@ -140,19 +140,20 @@ function Terminal({ rid, channel, active, onResize }: Props) {
             term.onData((data) => invoke("pty_write", { rid, data }));
             term.onResize(({ cols, rows }) => {
                 invoke("pty_resize", { rid, cols, rows });
-                onResizeRef.current?.(cols, rows);
+                handleResize(cols, rows);
             });
 
             invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
 
-            if (activeRef.current) term.focus();
+            focusIfActive(term);
         })();
 
         return () => {
             ac.abort();
+            unsubChannel?.();
             dispose?.();
         };
-    }, [rid, channel]);
+    }, [rid]);
 
     useEffect(() => {
         if (active) termRef.current?.focus();
