@@ -122,6 +122,7 @@ export async function installMenu(): Promise<() => void> {
         items: [piyoMenu, fileMenu, editMenu, viewMenu, windowMenu, helpMenu],
     });
     await menu.setAsAppMenu();
+    await helpMenu.setAsHelpMenuForNSApp();
 
     const refresh = async () => {
         const { tabs, activeId } = useTabsStore.getState();
