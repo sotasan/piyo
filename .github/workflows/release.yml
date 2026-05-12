@@ -43,7 +43,7 @@ jobs:
 
             - name: Generate release notes
               id: changelog
-              uses: sotasan/git-cliff-action@fix-macos-stat
+              uses: orhun/git-cliff-action@v4
               with:
                   config: cliff.toml
                   args: --unreleased --tag ${{ steps.tag.outputs.value }}
