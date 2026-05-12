@@ -3,4 +3,4 @@ font_size = 15
 theme = "rose-pine"
 
 [terminal]
-padding = "4px"
+padding = "8px"
