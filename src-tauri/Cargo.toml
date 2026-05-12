@@ -1,6 +1,6 @@
 [package]
 name = "piyo"
-version = "0.0.16"
+version = "0.0.17"
 description = "The coziest terminal emulator"
 authors = ["Sōta"]
 edition = "2024"
