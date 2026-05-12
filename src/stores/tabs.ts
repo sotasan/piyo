@@ -43,11 +43,16 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     spawn: async (cwd) => {
         const channel = new Channel<PtyEvent>();
         const { cols, rows } = get().dims;
-        const rid = await invoke<number>("pty_spawn", { events: channel, cols, rows, cwd });
+        const { rid, shell } = await invoke<{ rid: number; shell: string }>("pty_spawn", {
+            events: channel,
+            cols,
+            rows,
+            cwd,
+        });
         channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
         tabChannels.set(rid, channel);
         set((s) => ({
-            tabs: [...s.tabs, { id: rid, title: "" }],
+            tabs: [...s.tabs, { id: rid, title: shell }],
             activeId: rid,
         }));
         return rid;

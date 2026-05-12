@@ -35,6 +35,13 @@ pub enum PtyEvent {
     Exit,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtySpawned {
+    rid: ResourceId,
+    shell: String,
+}
+
 type ChildHandle = Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>;
 
 pub struct PtyHandle {
@@ -118,6 +125,27 @@ fn hushlogin() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(unix)]
+fn login_shell_from_passwd() -> Option<String> {
+    use uzers::os::unix::UserExt;
+    let user = uzers::get_user_by_uid(uzers::get_current_uid())?;
+    let shell = user.shell().to_str()?;
+    if shell.is_empty() { None } else { Some(shell.to_owned()) }
+}
+
+#[cfg(not(unix))]
+fn login_shell_from_passwd() -> Option<String> {
+    None
+}
+
+fn resolve_shell_path() -> String {
+    std::env::var("SHELL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(login_shell_from_passwd)
+        .unwrap_or_else(|| "/bin/sh".into())
+}
+
 fn apply_common_env(cmd: &mut CommandBuilder, bin_dir: &Path) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
@@ -160,7 +188,7 @@ pub async fn pty_spawn(
     cols: u16,
     rows: u16,
     cwd: Option<String>,
-) -> CommandResult<ResourceId> {
+) -> CommandResult<PtySpawned> {
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,
@@ -170,7 +198,12 @@ pub async fn pty_spawn(
         })
         .context("failed to open pty")?;
 
-    let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    let shell_path = resolve_shell_path();
+    let shell_name = Path::new(&shell_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sh")
+        .to_string();
     let shell = Shell::detect(&shell_path);
     let resource_dir = app
         .path()
@@ -229,7 +262,7 @@ pub async fn pty_spawn(
         let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
     });
 
-    Ok(rid)
+    Ok(PtySpawned { rid, shell: shell_name })
 }
 
 #[tauri::command]
