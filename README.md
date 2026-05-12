@@ -11,16 +11,10 @@
 ## Features
 
 - ⚡ GPU-accelerated rendering
-- 🪟 Native macOS vibrancy and transparency
-- 🎨 Customizable themes with user-defined CSS
-- 🖼️ Inline images (Sixel, iTerm2)
-- 🔗 Clickable hyperlinks
-- 📊 Progress reporting (ConEmu OSC 9;4)
-- 🔔 Desktop notifications (OSC 9, 777)
-- 🤖 Claude Code task-finish banners
-- 🐚 Bash, Zsh, Fish, and Nushell shell integration
-- 🌈 Full Unicode and emoji width handling
-- 🎯 Live macOS accent color sync
+- 🍎 Native macOS look and feel
+- ✨ Claude Code integration
+- 🐚 Bash, Zsh, Fish and Nushell integration
+- 🎨 Shiki themes support
 
 ## Installation
 
