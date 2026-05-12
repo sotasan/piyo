@@ -19,6 +19,7 @@ fn main() {
 
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rustc-link-lib=framework=WebKit");
+
         println!("cargo:rerun-if-changed=src/macos/context_menu.m");
         println!("cargo:rerun-if-changed=src/macos/refresh_rate.m");
     }
