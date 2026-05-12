@@ -14,8 +14,10 @@ import { applyAccent, subscribeAccent } from "@/stores/accent";
 type AppConfig = {
     font_family: string;
     font_size: number;
-    padding: string;
     theme: string;
+    terminal: {
+        padding: string;
+    };
 };
 
 const config = await invoke<AppConfig>("get_config");

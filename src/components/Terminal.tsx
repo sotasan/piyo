@@ -19,8 +19,10 @@ import { useThemeStore } from "@/stores/theme";
 type AppConfig = {
     font_family: string;
     font_size: number;
-    padding: string;
     theme: string;
+    terminal: {
+        padding: string;
+    };
 };
 
 type Props = {
@@ -119,7 +121,7 @@ function Terminal({ rid, active, onResize }: Props) {
             if (ac.signal.aborted) return;
 
             term.open(container);
-            if (term.element) term.element.style.padding = config.padding;
+            if (term.element) term.element.style.padding = config.terminal.padding;
             try {
                 term.loadAddon(new WebglAddon());
             } catch {}
