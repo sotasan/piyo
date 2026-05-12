@@ -12,7 +12,7 @@ use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibranc
 use accent::get_accent_color;
 use config::get_config;
 use pty::{pty_close, pty_resize, pty_spawn, pty_write};
-use theme::get_theme_css;
+use theme::read_user_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,7 +52,7 @@ pub fn run() {
             pty_resize,
             pty_close,
             get_config,
-            get_theme_css,
+            read_user_theme,
             get_accent_color
         ])
         .run(tauri::generate_context!())

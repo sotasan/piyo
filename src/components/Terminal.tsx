@@ -14,6 +14,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { i18next } from "@/lib/i18n";
 import { useTabsStore } from "@/stores/tabs";
+import { useThemeStore } from "@/stores/theme";
 
 type AppConfig = {
     font_family: string;
@@ -37,19 +38,12 @@ function fontStack(family: string): string {
         .join(", ");
 }
 
-function readThemeColors() {
-    const styles = getComputedStyle(document.documentElement);
-    const v = (name: string) => styles.getPropertyValue(name).trim();
-    return {
-        background: v("--theme-background"),
-        foreground: v("--theme-foreground"),
-        cursor: v("--theme-cursor"),
-    };
-}
 
 function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
+
+    const xtermTheme = useThemeStore((s) => s.theme?.xterm);
 
     const handleResize = useEffectEvent((cols: number, rows: number) => {
         onResize?.(cols, rows);
@@ -57,6 +51,7 @@ function Terminal({ rid, active, onResize }: Props) {
     const focusIfActive = useEffectEvent((term: XtermTerminal) => {
         if (active) term.focus();
     });
+    const buildTheme = useEffectEvent(() => xtermTheme);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -73,7 +68,7 @@ function Terminal({ rid, active, onResize }: Props) {
             const term = new XtermTerminal({
                 fontSize: config.font_size,
                 fontFamily: fontStack(config.font_family),
-                theme: readThemeColors(),
+                theme: buildTheme(),
                 cursorBlink: true,
                 quirks: { allowSetCursorBlink: true },
                 scrollbar: { width: 8 },
@@ -154,6 +149,12 @@ function Terminal({ rid, active, onResize }: Props) {
             dispose?.();
         };
     }, [rid]);
+
+    useEffect(() => {
+        const term = termRef.current;
+        if (!term) return;
+        term.options.theme = xtermTheme;
+    }, [xtermTheme]);
 
     useEffect(() => {
         if (active) termRef.current?.focus();
