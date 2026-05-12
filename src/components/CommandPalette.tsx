@@ -1,9 +1,10 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { applyThemeCss } from "@/lib/theme";
+import { applyTheme } from "@/lib/theme";
 import { applyAccent } from "@/stores/accent";
 
 type PaletteMode = "files" | "commands";
@@ -47,7 +48,8 @@ export default function CommandPalette() {
                 {mode === "commands" && (
                     <Command.Item
                         onSelect={async () => {
-                            await Promise.all([applyThemeCss(), applyAccent()]);
+                            const cfg = await invoke<{ theme: string }>("get_config");
+                            await Promise.all([applyTheme(cfg.theme), applyAccent()]);
                             close();
                         }}
                         className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"

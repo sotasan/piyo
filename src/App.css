@@ -3,7 +3,6 @@
 
 @theme inline {
     --color-accent: var(--theme-accent);
-    --color-accent-dark: color-mix(in oklab, var(--color-accent), black 30%);
     --color-background: var(--theme-background);
     --color-border: var(--theme-border);
     --color-foreground: var(--theme-foreground);
@@ -11,7 +10,6 @@
 
 @layer base {
     :root {
-        color-scheme: dark;
         background: transparent;
     }
 
