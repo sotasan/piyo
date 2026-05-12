@@ -1,8 +1,5 @@
 #[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn piyo_install_context_menu();
-    fn piyo_install_refresh_rate(wk_webview: *mut std::ffi::c_void);
-}
+include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
 
 #[cfg(target_os = "macos")]
 pub mod context_menu {
