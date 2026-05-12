@@ -54,8 +54,8 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                 "flex items-center pl-2 pr-6 text-xs",
                 "transition-colors",
                 isActive
-                    ? "bg-accent-dark/40 text-foreground"
-                    : "text-foreground/60 hover:bg-accent-dark/20",
+                    ? "bg-foreground/15 text-foreground"
+                    : "text-foreground/60 hover:bg-foreground/10",
             ].join(" ")}
         >
             <TabTitle cwd={cwd} title={tab.title} className="pointer-events-none flex-1" />
@@ -71,7 +71,7 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                     "absolute right-1 top-1/2 -translate-y-1/2",
                     "size-4 flex items-center justify-center rounded-sm",
                     "opacity-0 group-hover:opacity-100",
-                    "hover:bg-accent-dark/40",
+                    "hover:bg-foreground/15",
                     "icon-[lucide--x] text-foreground/80",
                 ].join(" ")}
             />
