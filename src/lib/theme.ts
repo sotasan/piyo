@@ -60,7 +60,13 @@ function pick(colors: Record<string, string>, keys: string[]): string | undefine
 
 async function loadTheme(name: string): Promise<ShikiTheme> {
     const userJson = await invoke<string | null>("read_user_theme", { name });
-    if (userJson) return JSON.parse(userJson) as ShikiTheme;
+    if (userJson) {
+        try {
+            return JSON.parse(userJson) as ShikiTheme;
+        } catch (err) {
+            console.warn(`piyo: user theme "${name}" is not valid JSON; falling back`, err);
+        }
+    }
 
     const key = (name in bundledThemes ? name : DEFAULT_THEME) as BundledTheme;
     const mod = await bundledThemes[key]();
