@@ -14,7 +14,8 @@
 - 🍎 Native macOS look and feel
 - ✨ Claude Code integration
 - 🐚 Bash, Zsh, Fish and Nushell integration
-- 🎨 Shiki themes support
+- 🎨 Shiki-powered themes
+- ⚙️ TOML-based user config
 
 ## Installation
 
