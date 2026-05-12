@@ -7,9 +7,9 @@ import CommandPalette from "@/components/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 import SidebarToggle from "@/components/SidebarToggle";
 import TabBar from "@/components/TabBar";
+import TabTitle from "@/components/TabTitle";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
-import { useFileIcon } from "@/hooks/useFileIcon";
 import { useTabsLifecycle } from "@/hooks/useTabsLifecycle";
 import { useTabsStore } from "@/stores/tabs";
 
@@ -65,7 +65,6 @@ function App() {
     };
 
     const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
-    const activeIcon = useFileIcon(activeCwd, 32);
 
     return (
         <div className="relative h-full w-full bg-accent-dark/30">
@@ -88,7 +87,7 @@ function App() {
                     style={{ width: separatorWidth, flexBasis: separatorWidth }}
                 />
                 <Panel className="relative">
-                    <div className="absolute top-11 right-2 bottom-2 left-2 overflow-hidden rounded-lg border border-border bg-background">
+                    <div className="absolute top-10 right-2 bottom-2 left-2 overflow-hidden rounded-xl border border-border bg-background">
                         {[...tabs]
                             .sort((a, b) => a.id - b.id)
                             .map((tab) => (
@@ -118,9 +117,12 @@ function App() {
                         onReorder={reorder}
                     />
                 ) : (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2">
-                        {activeIcon && <img src={activeIcon} alt="" className="h-4 w-4" />}
-                        <span className="text-sm text-foreground select-none">{activeTitle}</span>
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <TabTitle
+                            cwd={activeCwd}
+                            title={activeTitle}
+                            className="text-sm text-foreground"
+                        />
                     </div>
                 )}
             </Titlebar>

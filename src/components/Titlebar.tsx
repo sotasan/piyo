@@ -11,7 +11,7 @@ function Titlebar({ children, className = "", style }: Props) {
         <div
             data-tauri-drag-region
             style={style}
-            className={`flex h-11 shrink-0 items-center ${className}`}
+            className={`flex h-10 shrink-0 items-center ${className}`}
         >
             {children}
         </div>

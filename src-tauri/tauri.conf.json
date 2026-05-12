@@ -18,7 +18,7 @@
                 "visible": false,
                 "titleBarStyle": "Overlay",
                 "hiddenTitle": true,
-                "trafficLightPosition": { "x": 16, "y": 24 }
+                "trafficLightPosition": { "x": 14, "y": 22 }
             }
         ],
         "macOSPrivateApi": true,
@@ -42,7 +42,9 @@
     "plugins": {
         "updater": {
             "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMwRTYzMjRBN0ZGOUFCMUQKUldRZHEvbC9Takxtd0hvaVNBYjk2RnVCSTVxS1Y4aTNMNWdzQ2RKQ3NMNUkxZGdSRjJqY0JVaGoK",
-            "endpoints": ["https://github.com/sotasan/piyo/releases/latest/download/latest.json"]
+            "endpoints": [
+                "https://github.com/sotasan/piyo/releases/latest/download/latest.json"
+            ]
         }
     }
 }

@@ -9,7 +9,7 @@ import {
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { useFileIcon } from "@/hooks/useFileIcon";
+import TabTitle from "@/components/TabTitle";
 import { useTabsStore } from "@/stores/tabs";
 
 type TabSummary = { id: number; title: string };
@@ -34,7 +34,6 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
         id: tab.id,
     });
     const cwd = useTabsStore((s) => s.cwds.get(tab.id) ?? "");
-    const icon = useFileIcon(cwd, 32);
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -52,21 +51,14 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
             {...listeners}
             className={[
                 "group relative flex-1 min-w-[60px] max-w-[200px] h-7 rounded-md",
-                "flex items-center justify-center px-6 text-xs select-none",
+                "flex items-center pl-2 pr-6 text-xs",
                 "transition-colors",
                 isActive
                     ? "bg-accent-dark/40 text-foreground"
                     : "text-foreground/60 hover:bg-accent-dark/20",
             ].join(" ")}
         >
-            {icon && (
-                <img
-                    src={icon}
-                    alt=""
-                    className="pointer-events-none absolute top-1/2 left-1 size-4 -translate-y-1/2"
-                />
-            )}
-            <span className="pointer-events-none truncate">{tab.title || "…"}</span>
+            <TabTitle cwd={cwd} title={tab.title} className="pointer-events-none flex-1" />
             <span
                 role="button"
                 aria-label="Close tab"
