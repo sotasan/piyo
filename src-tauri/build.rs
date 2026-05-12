@@ -5,6 +5,7 @@ fn main() {
         bindgen::Builder::default()
             .header("src/macos/macos.h")
             .allowlist_function("piyo_.*")
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .generate()
             .expect("bindgen failed")
             .write_to_file(std::path::Path::new(&out_dir).join("macos_bindings.rs"))
@@ -20,7 +21,6 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=WebKit");
         println!("cargo:rerun-if-changed=src/macos/context_menu.m");
         println!("cargo:rerun-if-changed=src/macos/refresh_rate.m");
-        println!("cargo:rerun-if-changed=src/macos/macos.h");
     }
 
     tauri_build::build()
