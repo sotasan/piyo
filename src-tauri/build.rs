@@ -10,7 +10,7 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=WebKit");
         println!("cargo:rerun-if-changed=src/macos/context_menu.m");
         println!("cargo:rerun-if-changed=src/macos/refresh_rate.m");
-        println!("cargo:rerun-if-changed=src/macos/piyo.h");
+        println!("cargo:rerun-if-changed=src/macos/macos.h");
     }
 
     tauri_build::build()
