@@ -67,7 +67,7 @@ function App() {
     const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
 
     return (
-        <div className="relative h-full w-full bg-accent-dark/30">
+        <div className="relative h-full w-full bg-accent/15">
             <Group className="h-full" orientation="horizontal">
                 <Panel
                     panelRef={sidebarRef}
