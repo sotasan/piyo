@@ -8,6 +8,7 @@ mod pty;
 mod theme;
 
 use tauri::Manager;
+use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
 use accent::get_accent_color;
 use appearance::set_window_appearance;
@@ -34,6 +35,13 @@ pub fn run() {
                     .get_webview_window("main")
                     .expect("main window missing in tauri.conf.json");
                 macos::context_menu::install();
+                apply_vibrancy(
+                    &main,
+                    NSVisualEffectMaterial::Sidebar,
+                    Some(NSVisualEffectState::Active),
+                    None,
+                )
+                .expect("failed to apply window vibrancy");
                 macos::refresh_rate::install(&main);
                 accent::install_observer(app.handle().clone());
             }
