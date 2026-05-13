@@ -119,11 +119,16 @@ export async function applyTheme(name: string): Promise<void> {
         }
     }
 
-    root.style.colorScheme = theme.type === "light" ? "light" : "dark";
+    const mode: "light" | "dark" = theme.type === "light" ? "light" : "dark";
+    root.style.colorScheme = mode;
+
+    await invoke("set_window_appearance", { mode }).catch((err) => {
+        console.warn("piyo: failed to set native window appearance", err);
+    });
 
     useThemeStore.getState().set({
         name: theme.name ?? name,
-        type: theme.type === "light" ? "light" : "dark",
+        type: mode,
         xterm,
     });
 }
