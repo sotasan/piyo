@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ITheme } from "@xterm/xterm";
+import { themeToTreeStyles } from "@pierre/trees";
+import type { CSSProperties } from "react";
 import { bundledThemes, type BundledTheme } from "shiki";
 
 import { useThemeStore } from "@/stores/theme";
@@ -77,6 +79,13 @@ export async function applyTheme(name: string): Promise<void> {
     const theme = await loadTheme(name);
     const colors = (theme.colors ?? {}) as Record<string, string>;
 
+    const treeStyles = themeToTreeStyles({
+        type: theme.type,
+        bg: theme.bg,
+        fg: theme.fg,
+        colors,
+    }) as CSSProperties;
+
     const background =
         pick(colors, ["terminal.background", "editor.background"]) ?? theme.bg ?? "#000000";
     const foreground =
@@ -125,5 +134,6 @@ export async function applyTheme(name: string): Promise<void> {
         name: theme.name ?? name,
         type: theme.type === "light" ? "light" : "dark",
         xterm,
+        treeStyles,
     });
 }
