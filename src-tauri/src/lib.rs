@@ -12,7 +12,7 @@ use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibranc
 
 use accent::get_accent_color;
 use config::get_config;
-use fs::list_dir;
+use fs::{WatcherRegistry, fs_watch_start, fs_watch_stop, list_dir};
 use pty::{pty_close, pty_resize, pty_spawn, pty_write};
 use theme::read_user_theme;
 
@@ -28,6 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             app.manage(config::load());
+            app.manage(WatcherRegistry::new());
 
             #[cfg(target_os = "macos")]
             {
@@ -57,6 +58,8 @@ pub fn run() {
             read_user_theme,
             get_accent_color,
             list_dir,
+            fs_watch_start,
+            fs_watch_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
