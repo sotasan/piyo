@@ -209,7 +209,14 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             const cwds = new Map(s.cwds);
             cwds.set(rid, cwd);
-            return { cwds };
+            const trees = new Map(s.trees);
+            const tree = trees.get(rid);
+            if (tree && tree.root !== cwd) {
+                tree.unsubscribe();
+                tree.model.cleanUp();
+                trees.delete(rid);
+            }
+            return { cwds, trees };
         }),
 
     handleExit: (rid) =>
