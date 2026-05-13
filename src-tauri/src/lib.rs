@@ -1,4 +1,5 @@
 mod accent;
+mod appearance;
 mod config;
 mod icon;
 mod macos;
@@ -10,6 +11,7 @@ use tauri::Manager;
 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
 use accent::get_accent_color;
+use appearance::set_window_appearance;
 use config::get_config;
 use pty::{pty_close, pty_resize, pty_spawn, pty_write};
 use theme::read_user_theme;
@@ -53,7 +55,8 @@ pub fn run() {
             pty_close,
             get_config,
             read_user_theme,
-            get_accent_color
+            get_accent_color,
+            set_window_appearance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

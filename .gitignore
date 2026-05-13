@@ -1,5 +1,4 @@
 dist
-docs/superpowers
 node_modules
 .DS_Store
 *~lock~
