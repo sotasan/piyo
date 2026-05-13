@@ -25,14 +25,21 @@ mod platform {
     }
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Light,
+    Dark,
+}
+
 #[tauri::command]
 pub fn set_window_appearance<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
-    mode: String,
+    mode: Mode,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let dark = mode != "light";
+        let dark = matches!(mode, Mode::Dark);
         platform::apply(&window, dark)?;
     }
     #[cfg(not(target_os = "macos"))]
