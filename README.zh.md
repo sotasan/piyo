@@ -7,7 +7,7 @@
 <p align="center">最舒适的终端模拟器 🐥</p>
 
 <p align="center">
-    <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <b>简体中文</b>
+    <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ja.md">日本語</a> | 简体中文
 </p>
 
 ![Piyo](.github/assets/screenshot.png)
