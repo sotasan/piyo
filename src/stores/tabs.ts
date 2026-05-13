@@ -9,8 +9,6 @@ function stripTrailingSlash(p: string): string {
     return p.endsWith("/") ? p.slice(0, -1) : p;
 }
 
-const FOLDER_ICON_URL = "icon://localhost/tmp?size=32";
-
 const FOLDER_ICON_CSS = `
 [data-item-type='folder'] [data-item-section='icon'] {
     width: auto;
@@ -22,7 +20,6 @@ const FOLDER_ICON_CSS = `
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    background-image: url('${FOLDER_ICON_URL}');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
