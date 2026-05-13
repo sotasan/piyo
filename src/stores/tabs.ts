@@ -9,6 +9,26 @@ function stripTrailingSlash(p: string): string {
     return p.endsWith("/") ? p.slice(0, -1) : p;
 }
 
+const FOLDER_ICON_URL = "icon://localhost/tmp?size=32";
+
+const FOLDER_ICON_CSS = `
+[data-item-type='folder'] [data-icon-name='file-tree-icon-chevron'] {
+    margin-inline-end: 4px;
+}
+[data-item-type='folder'] [data-icon-name='file-tree-icon-chevron']::after {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-inline-start: 4px;
+    background-image: url('${FOLDER_ICON_URL}');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    vertical-align: middle;
+}
+`;
+
 export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
 export type Tab = {
@@ -132,7 +152,11 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         const root = state.cwds.get(rid);
         if (!root) return null;
 
-        const model = new FileTree({ paths: [], initialExpansion: "closed" });
+        const model = new FileTree({
+            paths: [],
+            initialExpansion: "closed",
+            unsafeCSS: FOLDER_ICON_CSS,
+        });
         const entry: TabTree = {
             model,
             root,
