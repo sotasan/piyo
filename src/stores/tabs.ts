@@ -162,7 +162,10 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             return { trees };
         });
 
-        fsWatchStart(rid, root).catch((err) => console.error("fs_watch_start failed", err));
+        // fs watcher temporarily disabled — was freezing the app when cwd is in a
+        // high-churn directory (e.g., project root with bun tauri dev running).
+        // fsWatchStart(rid, root).catch((err) => console.error("fs_watch_start failed", err));
+        void fsWatchStart;
 
         listDir(root)
             .then((entries) => {
