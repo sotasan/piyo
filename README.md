@@ -7,7 +7,7 @@
 <p align="center">The coziest terminal emulator 🐥</p>
 
 <p align="center">
-    <b>English</b> | <a href="README.de.md">Deutsch</a> | <a href="README.zh.md">简体中文</a>
+    English | <a href="README.de.md">Deutsch</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh.md">简体中文</a>
 </p>
 
 ![Piyo](.github/assets/screenshot.png)
