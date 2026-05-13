@@ -12,13 +12,16 @@ function stripTrailingSlash(p: string): string {
 const FOLDER_ICON_URL = "icon://localhost/tmp?size=32";
 
 const FOLDER_ICON_CSS = `
-[data-item-type='folder'] [data-item-section='content']::before {
+[data-item-type='folder'] [data-item-section='icon'] {
+    width: auto;
+    padding-inline-end: 6px;
+    gap: 4px;
+}
+[data-item-type='folder'] [data-item-section='icon']::after {
     content: '';
-    display: inline-block;
+    flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    margin-inline-end: 6px;
-    vertical-align: middle;
     background-image: url('${FOLDER_ICON_URL}');
     background-size: contain;
     background-repeat: no-repeat;
