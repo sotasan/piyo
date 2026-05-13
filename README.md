@@ -16,7 +16,7 @@
 
 - ⚡ GPU-accelerated rendering
 - 🍎 Native macOS look and feel
-- ✨ Claude Code integration
+- ✨ Claude Code and Codex CLI integration
 - 🐚 Bash, Zsh, Fish and Nushell integration
 - 🎨 Shiki-powered themes
 - ⚙️ TOML-based user config

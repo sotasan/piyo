@@ -16,7 +16,7 @@
 
 - ⚡ GPU 加速渲染
 - 🍎 原生 macOS 外观与体验
-- ✨ Claude Code 集成
+- ✨ Claude Code 和 Codex CLI 集成
 - 🐚 支持 Bash、Zsh、Fish 和 Nushell
 - 🎨 Shiki 驱动的主题
 - ⚙️ 基于 TOML 的用户配置
