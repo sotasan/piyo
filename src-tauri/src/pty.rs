@@ -130,7 +130,11 @@ fn login_shell_from_passwd() -> Option<String> {
     use uzers::os::unix::UserExt;
     let user = uzers::get_user_by_uid(uzers::get_current_uid())?;
     let shell = user.shell().to_str()?;
-    if shell.is_empty() { None } else { Some(shell.to_owned()) }
+    if shell.is_empty() {
+        None
+    } else {
+        Some(shell.to_owned())
+    }
 }
 
 #[cfg(not(unix))]
@@ -262,7 +266,10 @@ pub async fn pty_spawn(
         let _ = tauri::Emitter::emit(&app_for_osc, "pty:exit", &serde_json::json!({ "rid": rid }));
     });
 
-    Ok(PtySpawned { rid, shell: shell_name })
+    Ok(PtySpawned {
+        rid,
+        shell: shell_name,
+    })
 }
 
 #[tauri::command]

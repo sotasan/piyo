@@ -1,10 +1,12 @@
 import type { ITheme } from "@xterm/xterm";
+import type { CSSProperties } from "react";
 import { create } from "zustand";
 
 export interface ResolvedTheme {
     name: string;
     type: "dark" | "light";
     xterm: ITheme;
+    treeStyles: CSSProperties;
 }
 
 interface ThemeStore {
