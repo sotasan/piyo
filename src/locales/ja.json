@@ -1,0 +1,39 @@
+{
+    "palette": {
+        "filesLabel": "ファイル",
+        "commandsLabel": "コマンド",
+        "filesPlaceholder": "ファイルを検索…",
+        "commandsPlaceholder": "コマンドを入力…",
+        "empty": "結果がありません。",
+        "reloadTheme": "テーマを再読み込み"
+    },
+    "sidebar": {
+        "open": "サイドバーを開く",
+        "close": "サイドバーを閉じる"
+    },
+    "updates": {
+        "title": "アップデートがあります",
+        "prompt": "Piyo {{version}} が利用可能です。今すぐインストールしますか？",
+        "install": "インストール",
+        "later": "後で"
+    },
+    "terminal": {
+        "processExited": "[プロセスが終了しました]"
+    },
+    "menu": {
+        "file": "ファイル",
+        "edit": "編集",
+        "view": "表示",
+        "window": "ウインドウ",
+        "help": "ヘルプ",
+        "about": "{{name}} について",
+        "hide": "{{name}} を隠す",
+        "quit": "{{name}} を終了",
+        "zoom": "拡大/縮小",
+        "newTab": "新規タブ",
+        "closeTab": "タブを閉じる",
+        "selectPrevTab": "前のタブを選択",
+        "selectNextTab": "次のタブを選択",
+        "showTab": "タブ {{index}} を表示"
+    }
+}
