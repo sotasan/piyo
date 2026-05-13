@@ -1,12 +1,23 @@
+import { FileTree } from "@pierre/trees";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
+
+import { entryToTreePath, listDir } from "@/lib/fsBridge";
 
 export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
 export type Tab = {
     id: number;
     title: string;
+};
+
+export type TabTree = {
+    model: FileTree;
+    root: string;
+    hydrated: Set<string>;
+    knownDirs: Set<string>;
+    unsubscribe: () => void;
 };
 
 const tabChannels = new Map<number, Channel<PtyEvent>>();
@@ -17,6 +28,7 @@ interface TabsStore {
     activeId: number | null;
     cwds: Map<number, string>;
     dims: { cols: number; rows: number };
+    trees: Map<number, TabTree>;
 
     spawn: (cwd: string | null) => Promise<number>;
     spawnSibling: () => Promise<number>;
@@ -28,6 +40,7 @@ interface TabsStore {
     showAtIndex: (index: number) => void;
     setDims: (cols: number, rows: number) => void;
     subscribeToTab: (rid: number, handler: (event: PtyEvent) => void) => () => void;
+    getOrCreateTree: (rid: number) => TabTree | null;
 
     handleTitle: (rid: number, title: string) => void;
     handleCwd: (rid: number, cwd: string) => void;
@@ -39,6 +52,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     activeId: null,
     cwds: new Map(),
     dims: { cols: 80, rows: 24 },
+    trees: new Map(),
 
     spawn: async (cwd) => {
         const channel = new Channel<PtyEvent>();
@@ -106,6 +120,49 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         };
     },
 
+    getOrCreateTree: (rid) => {
+        const state = get();
+        const existing = state.trees.get(rid);
+        if (existing) return existing;
+        const root = state.cwds.get(rid);
+        if (!root) return null;
+
+        const model = new FileTree({ paths: [], initialExpansion: "closed" });
+        const entry: TabTree = {
+            model,
+            root,
+            hydrated: new Set(),
+            knownDirs: new Set(),
+            unsubscribe: () => {},
+        };
+
+        // Synchronously install in the map so concurrent calls find it.
+        set((s) => {
+            const trees = new Map(s.trees);
+            trees.set(rid, entry);
+            return { trees };
+        });
+
+        // Fire-and-forget initial root load.
+        listDir(root)
+            .then((entries) => {
+                const ops = entries.map((e) => ({
+                    type: "add" as const,
+                    path: entryToTreePath("", e),
+                }));
+                model.batch(ops);
+                // Track directories created at the root level.
+                for (const e of entries) {
+                    if (e.isDir) entry.knownDirs.add(entryToTreePath("", e));
+                }
+                // The root itself is hydrated (we just loaded its children).
+                entry.hydrated.add("");
+            })
+            .catch((err) => console.error("initial list_dir failed", err));
+
+        return entry;
+    },
+
     handleTitle: (rid, title) =>
         set((s) => ({
             tabs: s.tabs.map((t) => (t.id === rid ? { ...t, title } : t)),
@@ -124,8 +181,20 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             tabHandlers.delete(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
+            const trees = new Map(s.trees);
+            const tree = trees.get(rid);
+            if (tree) {
+                tree.unsubscribe();
+                tree.model.cleanUp();
+                trees.delete(rid);
+            }
             const next = s.tabs.filter((t) => t.id !== rid);
-            return { tabs: next, activeId: pickNextActive(rid, s.tabs, next, s.activeId), cwds };
+            return {
+                tabs: next,
+                activeId: pickNextActive(rid, s.tabs, next, s.activeId),
+                cwds,
+                trees,
+            };
         }),
 }));
 
