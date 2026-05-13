@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -146,21 +146,37 @@ fn resolve_shell_path() -> String {
         .unwrap_or_else(|| "/bin/sh".into())
 }
 
-fn apply_common_env(cmd: &mut CommandBuilder, bin_dir: &Path) {
+struct ResourceDirs {
+    integration: PathBuf,
+    bin: PathBuf,
+    scripts: PathBuf,
+}
+
+impl ResourceDirs {
+    fn from_resource_dir(resource_dir: &Path) -> Self {
+        Self {
+            integration: resource_dir.join("shell"),
+            bin: resource_dir.join("bin"),
+            scripts: resource_dir.join("scripts"),
+        }
+    }
+}
+
+fn apply_common_env(cmd: &mut CommandBuilder, dirs: &ResourceDirs) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", env!("CARGO_PKG_NAME"));
     cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
     cmd.env("LANG", lang);
-    cmd.env("PIYO_BIN", bin_dir);
+    cmd.env("PIYO_BIN", &dirs.bin);
+    cmd.env("PIYO_SCRIPTS", &dirs.scripts);
 }
 
 fn build_command(
     shell_path: &str,
     shell: &Shell,
-    integration_dir: &Path,
-    bin_dir: &Path,
+    dirs: &ResourceDirs,
     cwd: Option<&Path>,
 ) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
@@ -172,9 +188,9 @@ fn build_command(
     cmd.arg("--noprofile");
     cmd.arg("--norc");
     cmd.arg("-c");
-    cmd.arg(shell.exec_inner(shell_path, integration_dir));
-    apply_common_env(&mut cmd, bin_dir);
-    shell.apply_env(&mut cmd, integration_dir);
+    cmd.arg(shell.exec_inner(shell_path, &dirs.integration));
+    apply_common_env(&mut cmd, dirs);
+    shell.apply_env(&mut cmd, &dirs.integration);
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
@@ -209,10 +225,9 @@ pub async fn pty_spawn(
         .path()
         .resource_dir()
         .context("failed to resolve resource dir")?;
-    let integration_dir = resource_dir.join("shell");
-    let bin_dir = resource_dir.join("bin");
+    let dirs = ResourceDirs::from_resource_dir(&resource_dir);
     let cwd_path = cwd.as_ref().map(Path::new).filter(|p| p.is_dir());
-    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir, cwd_path)?;
+    let cmd = build_command(&shell_path, &shell, &dirs, cwd_path)?;
 
     let child = pair
         .slave
