@@ -5,6 +5,10 @@ import { create } from "zustand";
 
 import { entryToTreePath, listDir } from "@/lib/fsBridge";
 
+function stripTrailingSlash(p: string): string {
+    return p.endsWith("/") ? p.slice(0, -1) : p;
+}
+
 export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
 
 export type Tab = {
@@ -41,6 +45,7 @@ interface TabsStore {
     setDims: (cols: number, rows: number) => void;
     subscribeToTab: (rid: number, handler: (event: PtyEvent) => void) => () => void;
     getOrCreateTree: (rid: number) => TabTree | null;
+    expandDirectory: (rid: number, path: string) => Promise<void>;
 
     handleTitle: (rid: number, title: string) => void;
     handleCwd: (rid: number, cwd: string) => void;
@@ -136,31 +141,63 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             unsubscribe: () => {},
         };
 
-        // Synchronously install in the map so concurrent calls find it.
+        const checkExpansion = () => {
+            for (const dirPath of entry.knownDirs) {
+                if (entry.hydrated.has(dirPath)) continue;
+                const item = entry.model.getItem(dirPath);
+                if (item && item.isDirectory() && (item as import("@pierre/trees").FileTreeDirectoryHandle).isExpanded()) {
+                    void get().expandDirectory(rid, dirPath);
+                }
+            }
+        };
+
+        entry.unsubscribe = entry.model.subscribe(checkExpansion);
+
         set((s) => {
             const trees = new Map(s.trees);
             trees.set(rid, entry);
             return { trees };
         });
 
-        // Fire-and-forget initial root load.
         listDir(root)
             .then((entries) => {
                 const ops = entries.map((e) => ({
                     type: "add" as const,
                     path: entryToTreePath("", e),
                 }));
-                model.batch(ops);
-                // Track directories created at the root level.
+                if (ops.length > 0) model.batch(ops);
                 for (const e of entries) {
                     if (e.isDir) entry.knownDirs.add(entryToTreePath("", e));
                 }
-                // The root itself is hydrated (we just loaded its children).
                 entry.hydrated.add("");
             })
             .catch((err) => console.error("initial list_dir failed", err));
 
         return entry;
+    },
+
+    expandDirectory: async (rid, path) => {
+        const tree = get().trees.get(rid);
+        if (!tree) return;
+        if (tree.hydrated.has(path)) return;
+        tree.hydrated.add(path);
+
+        const abs = path === "" ? tree.root : `${tree.root}/${stripTrailingSlash(path)}`;
+        try {
+            const entries = await listDir(abs);
+            const ops = entries.map((e) => ({
+                type: "add" as const,
+                path: entryToTreePath(path, e),
+            }));
+            if (ops.length > 0) tree.model.batch(ops);
+            for (const e of entries) {
+                if (e.isDir) tree.knownDirs.add(entryToTreePath(path, e));
+            }
+        } catch (err) {
+            console.error("expandDirectory failed", path, err);
+            // Drop from hydrated so a later attempt can retry.
+            tree.hydrated.delete(path);
+        }
     },
 
     handleTitle: (rid, title) =>
