@@ -54,7 +54,7 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                 "flex items-center pl-2 pr-6 text-xs",
                 "transition-colors",
                 isActive
-                    ? "bg-foreground/15 text-foreground"
+                    ? "bg-foreground/10 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-foreground/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_-1px_0_rgb(0_0_0/0.15)] text-foreground"
                     : "text-foreground/60 hover:bg-foreground/10",
             ].join(" ")}
         >
