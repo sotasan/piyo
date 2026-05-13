@@ -10,7 +10,7 @@
 
 @layer base {
     :root {
-        background: var(--theme-background);
+        background: transparent;
     }
 
     body,
@@ -18,7 +18,7 @@
         margin: 0;
         width: 100vw;
         height: 100vh;
-        background: var(--theme-background);
+        background: transparent;
         user-select: none;
         -webkit-user-select: none;
     }

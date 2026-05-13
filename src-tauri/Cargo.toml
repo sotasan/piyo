@@ -42,6 +42,7 @@ tokio = { version = "1", features = ["rt", "macros"] }
 url = "2"
 vte = "0.15"
 whoami = "2"
+window-vibrancy = "0.7"
 
 [target.'cfg(unix)'.dependencies]
 uzers = "0.12"
