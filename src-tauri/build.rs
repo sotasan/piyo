@@ -3,7 +3,7 @@ fn main() {
     {
         let out_dir = std::env::var("OUT_DIR").unwrap();
         bindgen::Builder::default()
-            .header("src/macos/macos.h")
+            .header("src/macos/piyo.h")
             .allowlist_function("piyo_.*")
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .generate()
