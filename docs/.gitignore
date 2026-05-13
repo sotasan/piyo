@@ -1,15 +1,2 @@
-# Local
-.DS_Store
-*.local
-*.log*
-
-# Dist
-node_modules
-dist/
-doc_build/
-.rspress
-
-# IDE
-.vscode/*
-!.vscode/extensions.json
-.idea
+doc_build
+superpowers
