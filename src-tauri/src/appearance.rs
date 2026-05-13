@@ -1,7 +1,8 @@
 #[cfg(target_os = "macos")]
 mod platform {
     use objc2_app_kit::{
-        NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSWindow,
+        NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
+        NSWindow,
     };
     use tauri::{Runtime, WebviewWindow};
 
