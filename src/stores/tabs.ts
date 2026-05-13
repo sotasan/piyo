@@ -3,7 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-import { entryToTreePath, listDir } from "@/lib/fsBridge";
+import { entryToTreePath, fsWatchStart, fsWatchStop, listDir, subscribeFsEvents, type FsEvent } from "@/lib/fsBridge";
 
 function stripTrailingSlash(p: string): string {
     return p.endsWith("/") ? p.slice(0, -1) : p;
@@ -159,6 +159,8 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             return { trees };
         });
 
+        fsWatchStart(rid, root).catch((err) => console.error("fs_watch_start failed", err));
+
         listDir(root)
             .then((entries) => {
                 const ops = entries.map((e) => ({
@@ -215,6 +217,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
                 tree.unsubscribe();
                 tree.model.cleanUp();
                 trees.delete(rid);
+                fsWatchStop(rid).catch((err) => console.error("fs_watch_stop failed", err));
             }
             return { cwds, trees };
         }),
@@ -231,6 +234,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
                 tree.unsubscribe();
                 tree.model.cleanUp();
                 trees.delete(rid);
+                fsWatchStop(rid).catch((err) => console.error("fs_watch_stop failed", err));
             }
             const next = s.tabs.filter((t) => t.id !== rid);
             return {
@@ -241,6 +245,50 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             };
         }),
 }));
+
+function applyFsEvent(tree: TabTree, event: FsEvent): void {
+    const treePath = event.isDir ? `${event.path}/` : event.path;
+    const parent = parentDir(event.path);
+    if (!tree.hydrated.has(parent)) return;
+
+    switch (event.kind) {
+        case "create":
+            tree.model.add(treePath);
+            if (event.isDir) tree.knownDirs.add(treePath);
+            break;
+        case "remove":
+            tree.model.remove(treePath);
+            if (event.isDir) {
+                tree.knownDirs.delete(treePath);
+                tree.hydrated.delete(treePath);
+                // Drop descendants too — they're gone with their parent.
+                const prefix = treePath;
+                for (const d of tree.knownDirs) {
+                    if (d.startsWith(prefix)) tree.knownDirs.delete(d);
+                }
+                for (const h of tree.hydrated) {
+                    if (h.startsWith(prefix)) tree.hydrated.delete(h);
+                }
+            }
+            break;
+        case "rename": {
+            if (event.fromPath === undefined) return;
+            const fromTreePath = event.isDir ? `${event.fromPath}/` : event.fromPath;
+            tree.model.move(fromTreePath, treePath);
+            if (event.isDir) {
+                tree.knownDirs.delete(fromTreePath);
+                tree.knownDirs.add(treePath);
+            }
+            break;
+        }
+    }
+}
+
+function parentDir(relPath: string): string {
+    const trimmed = relPath.endsWith("/") ? relPath.slice(0, -1) : relPath;
+    const idx = trimmed.lastIndexOf("/");
+    return idx === -1 ? "" : `${trimmed.slice(0, idx)}/`;
+}
 
 function pickNextActive(
     closingRid: number,
@@ -264,6 +312,10 @@ export async function subscribeTabs(): Promise<UnlistenFn> {
         listen<{ rid: number }>("pty:exit", (e) =>
             useTabsStore.getState().handleExit(e.payload.rid),
         ),
+        subscribeFsEvents((event) => {
+            const tree = useTabsStore.getState().trees.get(event.rid);
+            if (tree) applyFsEvent(tree, event);
+        }),
     ]);
     return () => unlistens.forEach((u) => u());
 }
