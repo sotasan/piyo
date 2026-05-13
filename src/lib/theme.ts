@@ -122,7 +122,7 @@ export async function applyTheme(name: string): Promise<void> {
     const mode: "light" | "dark" = theme.type === "light" ? "light" : "dark";
     root.style.colorScheme = mode;
 
-    await invoke("set_window_appearance", { mode }).catch((err) => {
+    await invoke<void>("set_window_appearance", { mode }).catch((err) => {
         console.warn("piyo: failed to set native window appearance", err);
     });
 
