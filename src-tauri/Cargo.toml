@@ -19,7 +19,7 @@ cc = "1"
 tauri-build = { version = "2", features = [] }
 
 [target.'cfg(target_os = "macos")'.build-dependencies]
-bindgen = "0.70"
+bindgen = "0.72"
 
 [dependencies]
 anyhow = "1"
