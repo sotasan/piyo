@@ -1,5 +1,11 @@
+import FileTreePanel from "@/components/FileTreePanel";
+
 function Sidebar() {
-    return <aside className="flex h-full flex-col items-center gap-2 bg-transparent py-2" />;
+    return (
+        <aside className="flex h-full flex-col overflow-hidden bg-transparent">
+            <FileTreePanel />
+        </aside>
+    );
 }
 
 export default Sidebar;
