@@ -1,8 +1,11 @@
 use percent_encoding::percent_decode_str;
-use tauri::{AppHandle, Emitter, Manager, ResourceId};
+use tauri::{AppHandle, Manager, ResourceId};
 use tauri_plugin_notification::NotificationExt;
+use tauri_specta::Event;
 use url::Url;
 use vte::Perform;
+
+use crate::pty::PtyCwd;
 
 pub struct OscPerformer {
     app: AppHandle,
@@ -99,10 +102,11 @@ impl Perform for OscPerformer {
                 if let Some(uri) = join_payload(params, 1)
                     && let Some(path) = parse_file_uri(&uri)
                 {
-                    let _ = self.app.emit(
-                        "pty:cwd",
-                        &serde_json::json!({ "rid": self.rid, "cwd": path }),
-                    );
+                    let _ = PtyCwd {
+                        rid: self.rid,
+                        cwd: path,
+                    }
+                    .emit(&self.app);
                 }
             }
             b"9" => {

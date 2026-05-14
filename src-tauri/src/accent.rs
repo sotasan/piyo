@@ -1,3 +1,11 @@
+use serde::Serialize;
+use specta::Type;
+use tauri_specta::Event;
+
+/// Emitted whenever the system accent color changes.
+#[derive(Clone, Debug, Serialize, Type, Event)]
+pub struct AccentChanged(pub String);
+
 #[cfg(target_os = "macos")]
 mod platform {
     use std::ptr::NonNull;
@@ -5,9 +13,11 @@ mod platform {
     use block2::RcBlock;
     use objc2_app_kit::{NSColor, NSColorSpace, NSSystemColorsDidChangeNotification};
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSUserDefaults, ns_string};
-    use tauri::{AppHandle, Emitter};
+    use tauri::AppHandle;
+    use tauri_specta::Event;
 
-    const ACCENT_EVENT: &str = "accent:changed";
+    use super::AccentChanged;
+
     const FALLBACK: &str = "transparent";
 
     pub fn read_accent_hex() -> String {
@@ -31,7 +41,7 @@ mod platform {
 
     pub fn install_observer(app: AppHandle) {
         let block = RcBlock::new(move |_: NonNull<NSNotification>| {
-            app.emit(ACCENT_EVENT, read_accent_hex()).ok();
+            let _ = AccentChanged(read_accent_hex()).emit(&app);
         });
         let center = NSNotificationCenter::defaultCenter();
         unsafe {
@@ -59,6 +69,7 @@ mod platform {
 pub use platform::install_observer;
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_accent_color() -> String {
     platform::read_accent_hex()
 }

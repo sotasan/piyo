@@ -4,6 +4,7 @@ version = "0.0.23"
 description = "The coziest terminal emulator"
 authors = ["Sōta"]
 edition = "2024"
+default-run = "piyo"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,7 +24,7 @@ bindgen = "0.72"
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
+bitflags = { version = "2", features = ["serde"] }
 cached = "0.59"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 etcetera = "0.11"
@@ -35,6 +36,8 @@ png = "0.17"
 portable-pty = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "=0.0.12"
 toml = "1"
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2"
@@ -43,7 +46,10 @@ tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 tokio = { version = "1", features = ["rt", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 vte = "0.15"
 whoami = "2"

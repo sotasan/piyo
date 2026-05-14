@@ -34,7 +34,7 @@ mod platform {
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Light,
@@ -42,9 +42,7 @@ pub enum Mode {
 }
 
 #[tauri::command]
-pub fn set_window_appearance<R: tauri::Runtime>(
-    window: tauri::WebviewWindow<R>,
-    mode: Mode,
-) -> Result<(), String> {
+#[specta::specta]
+pub fn set_window_appearance(window: tauri::WebviewWindow, mode: Mode) -> Result<(), String> {
     platform::apply(&window, matches!(mode, Mode::Dark))
 }

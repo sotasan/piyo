@@ -1,83 +1,20 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-/** RGB color tuple, 0–255. */
-export type Rgb = [number, number, number];
+import { commands, events } from "@/gen/bindings";
+import { clearMouseTracking, setMouseTracking } from "@/lib/xtermInput";
 
-/** A single cell in a [`GhosttyFrame`]. */
-export type GhosttyCell = {
-    text: string;
-    fg: Rgb | null;
-    bg: Rgb | null;
-    /** Bit flags: 1=bold, 2=italic, 4=underline, 8=inverse, 16=faint,
-     *  32=strikethrough, 64=blink, 128=invisible. */
-    flags: number;
-};
-
-export type GhosttyRow = {
-    y: number;
-    cells: GhosttyCell[];
-};
-
-export type GhosttyCursor = {
-    x: number;
-    y: number;
-    visible: boolean;
-    blinking: boolean;
-    /** 0=block, 1=block_hollow, 2=underline, 3=bar. */
-    style: 0 | 1 | 2 | 3;
-};
-
-/** Kitty graphics image pixel data, base64-encoded 8-bit RGBA. Shipped on
- *  first sighting per session; the frontend caches by `id` afterwards. */
-export type GhosttyImage = {
-    id: number;
-    width: number;
-    height: number;
-    rgba: string;
-};
-
-/** A kitty graphics placement visible in the current viewport. Refers to an
- *  image by id; the renderer pulls pixel data from its cache. */
-export type GhosttyPlacement = {
-    imageId: number;
-    placementId: number;
-    /** Viewport-relative grid column. May be negative for partial visibility. */
-    viewportCol: number;
-    /** Viewport-relative grid row. May be negative for partial visibility. */
-    viewportRow: number;
-    pixelWidth: number;
-    pixelHeight: number;
-    sourceX: number;
-    sourceY: number;
-    sourceWidth: number;
-    sourceHeight: number;
-    z: number;
-};
-
-/** Snapshot from libghostty-vt of the dirty parts of the terminal grid. */
-export type GhosttyFrame = {
-    cols: number;
-    rows: number;
-    background: Rgb;
-    foreground: Rgb;
-    /** If true, the renderer should clear and reapply every row in `dirty`. */
-    full: boolean;
-    cursor: GhosttyCursor | null;
-    dirty: GhosttyRow[];
-    images: GhosttyImage[];
-    placements: GhosttyPlacement[];
-};
-
-export type PtyEvent = { kind: "frame"; data: GhosttyFrame } | { kind: "exit" };
+/** Raw bytes from a frame channel, or `null` for the exit kind. The first
+ *  byte is the discriminator (see `wire::KIND_*`). */
+export type PtyEvent = ArrayBuffer | null;
 
 export type Tab = {
     id: number;
     title: string;
 };
 
-const tabChannels = new Map<number, Channel<PtyEvent>>();
+const tabChannels = new Map<number, Channel<ArrayBuffer>>();
 const tabHandlers = new Map<number, (event: PtyEvent) => void>();
 
 interface TabsStore {
@@ -109,8 +46,10 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     dims: { cols: 80, rows: 24 },
 
     spawn: async (cwd) => {
-        const channel = new Channel<PtyEvent>();
+        const channel = new Channel<ArrayBuffer>();
         const { cols, rows } = get().dims;
+        // pty_spawn isn't part of the tauri-specta surface (its channel arg
+        // carries raw binary frames), so we hand-roll the invoke call here.
         const { rid, shell } = await invoke<{ rid: number; shell: string }>("pty_spawn", {
             events: channel,
             cols,
@@ -132,7 +71,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     },
 
     close: (rid) => {
-        invoke("pty_close", { rid }).catch((e) => console.error("pty_close failed", e));
+        void commands.ptyClose(rid);
     },
 
     reorder: (oldIndex, newIndex) =>
@@ -190,6 +129,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             tabChannels.delete(rid);
             tabHandlers.delete(rid);
+            clearMouseTracking(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
@@ -210,15 +150,14 @@ function pickNextActive(
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
     const unlistens = await Promise.all([
-        listen<{ rid: number; title: string }>("pty:title", (e) =>
+        events.ptyTitle.listen((e) =>
             useTabsStore.getState().handleTitle(e.payload.rid, e.payload.title),
         ),
-        listen<{ rid: number; cwd: string }>("pty:cwd", (e) =>
+        events.ptyCwd.listen((e) =>
             useTabsStore.getState().handleCwd(e.payload.rid, e.payload.cwd),
         ),
-        listen<{ rid: number }>("pty:exit", (e) =>
-            useTabsStore.getState().handleExit(e.payload.rid),
-        ),
+        events.ptyExit.listen((e) => useTabsStore.getState().handleExit(e.payload.rid)),
+        events.ptyModes.listen((e) => setMouseTracking(e.payload.rid, e.payload.mouseTracking)),
     ]);
     return () => unlistens.forEach((u) => u());
 }
