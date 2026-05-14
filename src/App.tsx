@@ -11,6 +11,7 @@ import TabTitle from "@/components/TabTitle";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
 import { useTabsLifecycle } from "@/hooks/useTabsLifecycle";
+import { useSettingsStore } from "@/stores/settings";
 import { useTabsStore } from "@/stores/tabs";
 
 import "@/App.css";
@@ -29,6 +30,7 @@ function App() {
     const isAnimatingRef = useRef(false);
 
     useTabsLifecycle();
+    const nativeTabs = useSettingsStore((s) => s.nativeTabs);
     const tabs = useTabsStore((s) => s.tabs);
     const activeId = useTabsStore((s) => s.activeId);
     const activeCwd = useTabsStore((s) =>
@@ -108,7 +110,7 @@ function App() {
                 style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX, paddingRight: 8 }}
             >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
-                {tabs.length >= 2 ? (
+                {!nativeTabs && tabs.length >= 2 ? (
                     <TabBar
                         tabs={tabs}
                         activeId={activeId}

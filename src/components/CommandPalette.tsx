@@ -4,6 +4,7 @@ import { Command } from "cmdk";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useNativeTabs } from "@/hooks/useNativeTabs";
 import { applyTheme } from "@/lib/theme";
 import { applyAccent } from "@/stores/accent";
 
@@ -15,6 +16,7 @@ export default function CommandPalette() {
     const { t } = useTranslation();
     const [mode, setMode] = useState<PaletteMode | null>(null);
     const close = () => setMode(null);
+    const native = useNativeTabs();
 
     useHotkey("Mod+P", () => {
         setMode((m) => (m === "files" ? null : "files"));
@@ -46,16 +48,57 @@ export default function CommandPalette() {
                     {t("palette.empty")}
                 </Command.Empty>
                 {mode === "commands" && (
-                    <Command.Item
-                        onSelect={async () => {
-                            const cfg = await invoke<{ theme: string }>("get_config");
-                            await Promise.all([applyTheme(cfg.theme), applyAccent()]);
-                            close();
-                        }}
-                        className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
-                    >
-                        {t("palette.reloadTheme")}
-                    </Command.Item>
+                    <>
+                        <Command.Item
+                            onSelect={async () => {
+                                const cfg = await invoke<{ theme: string }>("get_config");
+                                await Promise.all([applyTheme(cfg.theme), applyAccent()]);
+                                close();
+                            }}
+                            className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
+                        >
+                            {t("palette.reloadTheme")}
+                        </Command.Item>
+                        <Command.Item
+                            onSelect={() => {
+                                native.toggle();
+                                close();
+                            }}
+                            className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
+                        >
+                            {native.enabled
+                                ? t("palette.disableNativeTabs")
+                                : t("palette.enableNativeTabs")}
+                        </Command.Item>
+                        {native.enabled && (
+                            <Command.Item
+                                onSelect={() => {
+                                    native
+                                        .moveToNewWindow()
+                                        .catch((e) =>
+                                            console.error("move tab to new window failed", e),
+                                        );
+                                    close();
+                                }}
+                                className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
+                            >
+                                {t("palette.moveTabToNewWindow")}
+                            </Command.Item>
+                        )}
+                        {native.enabled && (
+                            <Command.Item
+                                onSelect={() => {
+                                    native
+                                        .mergeAll()
+                                        .catch((e) => console.error("merge all windows failed", e));
+                                    close();
+                                }}
+                                className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
+                            >
+                                {t("palette.mergeAllWindows")}
+                            </Command.Item>
+                        )}
+                    </>
                 )}
                 {mode === "files" &&
                     FILES_DEMO.map((f) => (

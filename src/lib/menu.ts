@@ -1,6 +1,8 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
+import { nativeTabsCommands } from "@/hooks/useNativeTabs";
 import { i18next } from "@/lib/i18n";
+import { useSettingsStore } from "@/stores/settings";
 import { useTabsStore } from "@/stores/tabs";
 
 const t = (key: string, opts?: Record<string, unknown>) => i18next.t(`menu.${key}`, opts);
@@ -56,10 +58,14 @@ export async function installMenu(): Promise<() => void> {
         text: t("newTab"),
         accelerator: "CmdOrCtrl+T",
         action: () => {
-            useTabsStore
-                .getState()
-                .spawnSibling()
-                .catch((e) => console.error("spawn failed", e));
+            if (useSettingsStore.getState().nativeTabs) {
+                nativeTabsCommands.newTab().catch((e) => console.error("native new tab failed", e));
+            } else {
+                useTabsStore
+                    .getState()
+                    .spawnSibling()
+                    .catch((e) => console.error("spawn failed", e));
+            }
         },
     });
     const closeTab = await MenuItem.new({
@@ -89,13 +95,29 @@ export async function installMenu(): Promise<() => void> {
         id: "prev-tab",
         text: t("selectPrevTab"),
         accelerator: "Shift+CmdOrCtrl+BracketLeft",
-        action: () => useTabsStore.getState().selectPrev(),
+        action: () => {
+            if (useSettingsStore.getState().nativeTabs) {
+                nativeTabsCommands
+                    .selectPrevious()
+                    .catch((e) => console.error("native select prev failed", e));
+            } else {
+                useTabsStore.getState().selectPrev();
+            }
+        },
     });
     const nextTab = await MenuItem.new({
         id: "next-tab",
         text: t("selectNextTab"),
         accelerator: "Shift+CmdOrCtrl+BracketRight",
-        action: () => useTabsStore.getState().selectNext(),
+        action: () => {
+            if (useSettingsStore.getState().nativeTabs) {
+                nativeTabsCommands
+                    .selectNext()
+                    .catch((e) => console.error("native select next failed", e));
+            } else {
+                useTabsStore.getState().selectNext();
+            }
+        },
     });
     const showTabItems = await Promise.all(
         Array.from({ length: 9 }, (_, i) =>
@@ -135,22 +157,31 @@ export async function installMenu(): Promise<() => void> {
 
     const refresh = async () => {
         const { tabs, activeId } = useTabsStore.getState();
+        const { nativeTabs } = useSettingsStore.getState();
         const hasActive = activeId !== null;
-        const has2Plus = tabs.length >= 2;
+        const has2Plus = nativeTabs || tabs.length >= 2;
         await Promise.all([
             closeTab.setEnabled(hasActive),
             prevTab.setEnabled(has2Plus),
             nextTab.setEnabled(has2Plus),
-            ...showTabItems.map((item, i) => item.setEnabled(i < tabs.length)),
+            ...showTabItems.map((item, i) => item.setEnabled(!nativeTabs && i < tabs.length)),
         ]);
     };
     await refresh();
 
-    const unsub = useTabsStore.subscribe((state, prev) => {
+    const unsubTabs = useTabsStore.subscribe((state, prev) => {
         if (state.tabs !== prev.tabs || state.activeId !== prev.activeId) {
             refresh().catch((e) => console.error("menu refresh failed", e));
         }
     });
+    const unsubSettings = useSettingsStore.subscribe((state, prev) => {
+        if (state.nativeTabs !== prev.nativeTabs) {
+            refresh().catch((e) => console.error("menu refresh failed", e));
+        }
+    });
 
-    return unsub;
+    return () => {
+        unsubTabs();
+        unsubSettings();
+    };
 }

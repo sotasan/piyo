@@ -5,7 +5,11 @@
         "filesPlaceholder": "Search files…",
         "commandsPlaceholder": "Type a command…",
         "empty": "No results.",
-        "reloadTheme": "Reload Theme"
+        "reloadTheme": "Reload Theme",
+        "enableNativeTabs": "Enable Native Tabs",
+        "disableNativeTabs": "Disable Native Tabs",
+        "moveTabToNewWindow": "Move Tab to New Window",
+        "mergeAllWindows": "Merge All Windows"
     },
     "sidebar": {
         "open": "Open sidebar",
