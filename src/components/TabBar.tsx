@@ -38,8 +38,8 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
         id: tab.id,
     });
     const cwd = useTabsStore((s) => s.cwds.get(tab.id) ?? "");
-    const nodeRef = useRef<HTMLButtonElement | null>(null);
-    const setRefs = (el: HTMLButtonElement | null) => {
+    const nodeRef = useRef<HTMLDivElement | null>(null);
+    const setRefs = (el: HTMLDivElement | null) => {
         setNodeRef(el);
         nodeRef.current = el;
     };
@@ -61,6 +61,8 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
 
     return (
         <motion.div
+            ref={setRefs}
+            style={style}
             className="h-7 flex-1 overflow-hidden"
             initial={{ opacity: 0, flexGrow: 0, minWidth: 0 }}
             animate={{ opacity: isDragging ? 0.6 : 1, flexGrow: 1, minWidth: 120 }}
@@ -68,9 +70,7 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
             transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
         >
             <button
-                ref={setRefs}
                 type="button"
-                style={style}
                 onClick={() => onActivate(tab.id)}
                 {...attributes}
                 {...listeners}
