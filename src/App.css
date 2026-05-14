@@ -3,7 +3,6 @@
 
 @theme inline {
     --color-accent: var(--theme-accent);
-    --color-accent-dark: color-mix(in oklab, var(--color-accent), black 30%);
     --color-background: var(--theme-background);
     --color-border: var(--theme-border);
     --color-foreground: var(--theme-foreground);
@@ -11,7 +10,6 @@
 
 @layer base {
     :root {
-        color-scheme: dark;
         background: transparent;
     }
 
@@ -23,6 +21,8 @@
         background: transparent;
         user-select: none;
         -webkit-user-select: none;
+        overflow: hidden;
+        overscroll-behavior: none;
     }
 }
 
@@ -32,6 +32,10 @@
         background: transparent;
         cursor: col-resize;
     }
+}
+
+@utility glass {
+    -apple-visual-effect: -apple-system-glass-material;
 }
 
 .xterm .xterm-viewport {

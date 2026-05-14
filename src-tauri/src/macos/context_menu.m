@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
+#import "piyo.h"
 
 typedef void (*WillOpenMenuIMP)(id, SEL, NSMenu *, NSEvent *);
 

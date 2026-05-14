@@ -6,10 +6,14 @@ import {
     useSensors,
     type DragEndEvent,
 } from "@dnd-kit/core";
+import { restrictToHorizontalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef } from "react";
 
-import { useFileIcon } from "@/hooks/useFileIcon";
+import TabTitle from "@/components/TabTitle";
+import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/stores/tabs";
 
 type TabSummary = { id: number; title: string };
@@ -34,56 +38,76 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
         id: tab.id,
     });
     const cwd = useTabsStore((s) => s.cwds.get(tab.id) ?? "");
-    const icon = useFileIcon(cwd, 32);
+    const nodeRef = useRef<HTMLDivElement | null>(null);
+    const setRefs = (el: HTMLDivElement | null) => {
+        setNodeRef(el);
+        nodeRef.current = el;
+    };
+
+    useEffect(() => {
+        if (isActive) {
+            nodeRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+                inline: "nearest",
+            });
+        }
+    }, [isActive]);
 
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.6 : 1,
     };
 
     return (
-        <button
-            ref={setNodeRef}
-            type="button"
+        <motion.div
+            ref={setRefs}
             style={style}
-            onClick={() => onActivate(tab.id)}
-            {...attributes}
-            {...listeners}
-            className={[
-                "group relative flex-1 min-w-[60px] max-w-[200px] h-7 rounded-md",
-                "flex items-center justify-center px-6 text-xs select-none",
-                "transition-colors",
-                isActive
-                    ? "bg-accent-dark/40 text-foreground"
-                    : "text-foreground/60 hover:bg-accent-dark/20",
-            ].join(" ")}
+            className="h-7 flex-1 overflow-hidden"
+            initial={{ opacity: 0, flexGrow: 0, minWidth: 0 }}
+            animate={{ opacity: isDragging ? 0.6 : 1, flexGrow: 1, minWidth: 120 }}
+            exit={{ opacity: 0, flexGrow: 0, minWidth: 0 }}
+            transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
         >
-            {icon && (
-                <img
-                    src={icon}
-                    alt=""
-                    className="pointer-events-none absolute top-1/2 left-1 size-4 -translate-y-1/2"
+            <button
+                type="button"
+                onClick={() => onActivate(tab.id)}
+                {...attributes}
+                {...listeners}
+                className={cn(
+                    "group relative w-full h-7 rounded-full",
+                    "flex items-center px-7 text-xs",
+                    "before:content-[''] before:absolute before:inset-0 before:rounded-full",
+                    "before:bg-foreground/10 before:opacity-0",
+                    isActive
+                        ? "glass bg-foreground/10 text-foreground"
+                        : "text-foreground/60 before:transition-opacity before:duration-200 hover:before:opacity-100",
+                )}
+            >
+                <TabTitle
+                    cwd={cwd}
+                    title={tab.title}
+                    className="pointer-events-none relative flex-1 justify-center"
                 />
-            )}
-            <span className="pointer-events-none truncate">{tab.title || "…"}</span>
-            <span
-                role="button"
-                aria-label="Close tab"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(tab.id);
-                }}
-                className={[
-                    "absolute right-1 top-1/2 -translate-y-1/2",
-                    "size-4 flex items-center justify-center rounded-sm",
-                    "opacity-0 group-hover:opacity-100",
-                    "hover:bg-accent-dark/40",
-                    "icon-[lucide--x] text-foreground/80",
-                ].join(" ")}
-            />
-        </button>
+                <span
+                    role="button"
+                    aria-label="Close tab"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClose(tab.id);
+                    }}
+                    className={cn(
+                        "absolute left-1.5 top-1/2 -translate-y-1/2 z-10",
+                        "size-4 flex items-center justify-center rounded-full",
+                        "opacity-0 group-hover:opacity-100",
+                        "hover:bg-foreground/15 transition",
+                    )}
+                >
+                    <span aria-hidden className="icon-[lucide--x] size-3 text-foreground/80" />
+                </span>
+            </button>
+        </motion.div>
     );
 }
 
@@ -100,25 +124,32 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     };
 
     return (
-        <div data-tauri-drag-region className="flex h-11 flex-1 items-center gap-1 px-1">
+        <div
+            data-tauri-drag-region
+            className="flex h-11 min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        >
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
+                modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+                autoScroll={{ threshold: { x: 0.2, y: 0 }, acceleration: 20 }}
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext
                     items={tabs.map((t) => t.id)}
                     strategy={horizontalListSortingStrategy}
                 >
-                    {tabs.map((tab) => (
-                        <SortableTab
-                            key={tab.id}
-                            tab={tab}
-                            isActive={tab.id === activeId}
-                            onActivate={onActivate}
-                            onClose={onClose}
-                        />
-                    ))}
+                    <AnimatePresence initial={false}>
+                        {tabs.map((tab) => (
+                            <SortableTab
+                                key={tab.id}
+                                tab={tab}
+                                isActive={tab.id === activeId}
+                                onActivate={onActivate}
+                                onClose={onClose}
+                            />
+                        ))}
+                    </AnimatePresence>
                 </SortableContext>
             </DndContext>
         </div>

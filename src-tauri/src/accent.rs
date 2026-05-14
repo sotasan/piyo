@@ -45,7 +45,17 @@ mod platform {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(target_os = "macos"))]
+mod platform {
+    use tauri::AppHandle;
+
+    pub fn read_accent_hex() -> String {
+        "transparent".into()
+    }
+
+    pub fn install_observer(_app: AppHandle) {}
+}
+
 pub use platform::install_observer;
 
 #[tauri::command]

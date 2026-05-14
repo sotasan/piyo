@@ -18,7 +18,7 @@
                 "visible": false,
                 "titleBarStyle": "Overlay",
                 "hiddenTitle": true,
-                "trafficLightPosition": { "x": 16, "y": 24 }
+                "trafficLightPosition": { "x": 14, "y": 22 }
             }
         ],
         "macOSPrivateApi": true,
@@ -30,7 +30,7 @@
         "active": true,
         "targets": "all",
         "createUpdaterArtifacts": true,
-        "resources": ["bin/**/*", "shell/**/*"],
+        "resources": ["bin/**/*", "scripts/**/*", "shell/**/*"],
         "icon": [
             "icons/32x32.png",
             "icons/128x128.png",

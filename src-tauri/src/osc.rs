@@ -34,6 +34,7 @@ impl OscPerformer {
     fn dispatch_agent(&self, action: AgentAction, payload: &str) {
         match action {
             AgentAction::ClaudeStop => self.handle_claude_stop(payload),
+            AgentAction::CodexNotify => self.handle_codex_notify(payload),
         }
     }
 
@@ -42,16 +43,50 @@ impl OscPerformer {
         if payload.is_empty() || self.window_focused() {
             return;
         }
-        let body = serde_json::from_str::<serde_json::Value>(payload)
+        let body = serde_json::from_str::<ClaudeStopPayload>(payload)
             .ok()
-            .and_then(|v| {
-                v.get("last_assistant_message")
-                    .and_then(|m| m.as_str())
-                    .map(String::from)
-            })
+            .and_then(|p| p.last_assistant_message)
             .unwrap_or_else(|| "Task complete".to_string());
         self.notify("Claude Code", &body);
     }
+
+    fn handle_codex_notify(&self, payload: &str) {
+        let payload = payload.trim();
+        if payload.is_empty() || self.window_focused() {
+            return;
+        }
+        let Ok(parsed) = serde_json::from_str::<CodexNotifyPayload>(payload) else {
+            return;
+        };
+        if parsed.kind != CodexNotifyKind::AgentTurnComplete {
+            return;
+        }
+        let body = parsed
+            .last_assistant_message
+            .unwrap_or_else(|| "Task complete".to_string());
+        self.notify("OpenAI Codex", &body);
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ClaudeStopPayload {
+    last_assistant_message: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct CodexNotifyPayload {
+    #[serde(rename = "type")]
+    kind: CodexNotifyKind,
+    #[serde(rename = "last-assistant-message")]
+    last_assistant_message: Option<String>,
+}
+
+#[derive(serde::Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum CodexNotifyKind {
+    AgentTurnComplete,
+    #[serde(other)]
+    Other,
 }
 
 impl Perform for OscPerformer {
@@ -110,12 +145,14 @@ impl Perform for OscPerformer {
 
 enum AgentAction {
     ClaudeStop,
+    CodexNotify,
 }
 
 impl AgentAction {
     fn parse(name: &str, subcommand: &str) -> Option<Self> {
         match (name, subcommand) {
             ("claude", "stop") => Some(Self::ClaudeStop),
+            ("codex", "notify") => Some(Self::CodexNotify),
             _ => None,
         }
     }

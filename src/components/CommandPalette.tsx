@@ -1,9 +1,10 @@
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { invoke } from "@tauri-apps/api/core";
 import { Command } from "cmdk";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { applyThemeCss } from "@/lib/theme";
+import { applyTheme } from "@/lib/theme";
 import { applyAccent } from "@/stores/accent";
 
 type PaletteMode = "files" | "commands";
@@ -31,7 +32,7 @@ export default function CommandPalette() {
             }}
             label={t(mode === "files" ? "palette.filesLabel" : "palette.commandsLabel")}
             overlayClassName="fixed inset-0 z-40"
-            contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[90vw] flex flex-col text-foreground bg-background border border-border rounded-xl overflow-hidden shadow-lg"
+            contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[90vw] flex flex-col text-foreground glass border border-border rounded-xl overflow-hidden shadow-lg"
         >
             <Command.Input
                 autoFocus
@@ -47,7 +48,8 @@ export default function CommandPalette() {
                 {mode === "commands" && (
                     <Command.Item
                         onSelect={async () => {
-                            await Promise.all([applyThemeCss(), applyAccent()]);
+                            const cfg = await invoke<{ theme: string }>("get_config");
+                            await Promise.all([applyTheme(cfg.theme), applyAccent()]);
                             close();
                         }}
                         className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
