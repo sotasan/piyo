@@ -29,6 +29,33 @@ export type GhosttyCursor = {
     style: 0 | 1 | 2 | 3;
 };
 
+/** Kitty graphics image pixel data, base64-encoded 8-bit RGBA. Shipped on
+ *  first sighting per session; the frontend caches by `id` afterwards. */
+export type GhosttyImage = {
+    id: number;
+    width: number;
+    height: number;
+    rgba: string;
+};
+
+/** A kitty graphics placement visible in the current viewport. Refers to an
+ *  image by id; the renderer pulls pixel data from its cache. */
+export type GhosttyPlacement = {
+    imageId: number;
+    placementId: number;
+    /** Viewport-relative grid column. May be negative for partial visibility. */
+    viewportCol: number;
+    /** Viewport-relative grid row. May be negative for partial visibility. */
+    viewportRow: number;
+    pixelWidth: number;
+    pixelHeight: number;
+    sourceX: number;
+    sourceY: number;
+    sourceWidth: number;
+    sourceHeight: number;
+    z: number;
+};
+
 /** Snapshot from libghostty-vt of the dirty parts of the terminal grid. */
 export type GhosttyFrame = {
     cols: number;
@@ -39,6 +66,8 @@ export type GhosttyFrame = {
     full: boolean;
     cursor: GhosttyCursor | null;
     dirty: GhosttyRow[];
+    images: GhosttyImage[];
+    placements: GhosttyPlacement[];
 };
 
 export type PtyEvent = { kind: "frame"; data: GhosttyFrame } | { kind: "exit" };

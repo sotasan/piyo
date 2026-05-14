@@ -13,7 +13,15 @@
  */
 import type { Terminal } from "@xterm/xterm";
 
-import type { GhosttyFrame, Rgb } from "@/stores/tabs";
+import type { GhosttyFrame, GhosttyPlacement, Rgb } from "@/stores/tabs";
+
+/** Per-terminal scratchpad for the kitty graphics overlay: the canvas element
+ *  layered above xterm's text grid plus a cache of decoded image bitmaps so
+ *  pixel data only crosses the IPC boundary once per image. */
+export type GraphicsOverlay = {
+    canvas: HTMLCanvasElement;
+    imageCache: Map<number, ImageBitmap>;
+};
 
 // Color mode: bits 25..26 of the packed fg/bg word.
 const CM_RGB = 0x3000000;
@@ -67,7 +75,11 @@ function packAttrs(flags: number, fgRgb: Rgb | null, bgRgb: Rgb | null) {
  * renderer treats the cell as occupied (otherwise per-row width / cursor
  * accounting drifts).
  */
-export function applyGhosttyFrame(term: Terminal, frame: GhosttyFrame): void {
+export function applyGhosttyFrame(
+    term: Terminal,
+    frame: GhosttyFrame,
+    overlay: GraphicsOverlay | null,
+): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const core = (term as unknown as { _core: any })._core;
     const buffer = core?.buffer;
@@ -106,6 +118,86 @@ export function applyGhosttyFrame(term: Terminal, frame: GhosttyFrame): void {
     if (minRow <= maxRow && typeof core.refresh === "function") {
         core.refresh(minRow, maxRow);
     }
+
+    if (overlay) {
+        ingestImages(overlay, frame.images);
+        repaintOverlay(overlay, core, frame.placements);
+    }
+}
+
+/** Kick off `createImageBitmap` for any newly-seen images and stash the
+ *  resulting bitmaps in the overlay cache. Decoding is async; placements
+ *  referencing a still-decoding image will be skipped this frame, and the
+ *  next frame redraws once the bitmap is ready. */
+function ingestImages(overlay: GraphicsOverlay, images: GhosttyFrame["images"]): void {
+    for (const img of images) {
+        if (overlay.imageCache.has(img.id)) continue;
+        const data = new ImageData(img.width, img.height);
+        data.data.set(base64ToBytes(img.rgba));
+        createImageBitmap(data)
+            .then((bm) => overlay.imageCache.set(img.id, bm))
+            .catch(() => {});
+    }
+}
+
+/** Resize the overlay canvas to match xterm's render area (accounting for
+ *  device pixel ratio) and paint every visible placement. Z-ordering is
+ *  applied so higher `z` draws on top. */
+function repaintOverlay(
+    overlay: GraphicsOverlay,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    core: any,
+    placements: GhosttyPlacement[],
+): void {
+    const { canvas } = overlay;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    const cssWidth = parent.clientWidth;
+    const cssHeight = parent.clientHeight;
+    if (cssWidth === 0 || cssHeight === 0) return;
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(cssWidth * dpr);
+    const targetH = Math.round(cssHeight * dpr);
+    if (canvas.width !== targetW) canvas.width = targetW;
+    if (canvas.height !== targetH) canvas.height = targetH;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    if (placements.length === 0) return;
+    const dims = core?._renderService?.dimensions?.css?.cell;
+    const cellWidth = dims?.width as number | undefined;
+    const cellHeight = dims?.height as number | undefined;
+    if (!cellWidth || !cellHeight) return;
+    const sorted = placements.slice().sort((a, b) => a.z - b.z);
+    for (const p of sorted) {
+        const bm = overlay.imageCache.get(p.imageId);
+        if (!bm) continue;
+        const x = p.viewportCol * cellWidth;
+        const y = p.viewportRow * cellHeight;
+        ctx.drawImage(
+            bm,
+            p.sourceX,
+            p.sourceY,
+            p.sourceWidth,
+            p.sourceHeight,
+            x,
+            y,
+            p.pixelWidth,
+            p.pixelHeight,
+        );
+    }
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+    const binary = atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
 }
 
 const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {

@@ -16,13 +16,17 @@
 //! The terminal handle is `!Send`/`!Sync`, so the session must live on the
 //! same thread as the PTY reader loop in [`crate::pty`].
 
+use std::collections::HashSet;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use libghostty_vt::{
     Terminal, TerminalOptions,
+    alloc::{Allocator, Bytes},
     key::KittyKeyFlags,
+    kitty::graphics::{DecodePng, DecodedImage, ImageFormat, PlacementIterator, set_png_decoder},
     render::{CellIterator, CursorVisualStyle, Dirty, RenderState, RowIterator, Snapshot},
     style::{RgbColor, Underline},
     terminal::Mode,
@@ -70,6 +74,8 @@ pub enum MouseFormat {
 pub type SharedModes = Arc<Mutex<Modes>>;
 
 const SCROLLBACK: usize = 5_000;
+/// Per-session ceiling on libghostty-vt's kitty graphics image store.
+const KITTY_STORAGE_LIMIT: u64 = 64 * 1024 * 1024;
 
 /// Serialised snapshot of the dirty parts of the terminal grid produced by
 /// [`Session::feed`]. Mirrors the data exposed by
@@ -86,6 +92,38 @@ pub struct Frame {
     pub full: bool,
     pub cursor: Option<Cursor>,
     pub dirty: Vec<Row>,
+    /// Kitty graphics images that the frontend hasn't seen yet. Each entry's
+    /// `rgba` is base64-encoded 8-bit RGBA, decoded by libghostty-vt from
+    /// the source PNG via `RustPngDecoder`.
+    pub images: Vec<ImageData>,
+    /// Visible kitty graphics placements for this snapshot. Reference
+    /// images by `image_id`; the frontend keeps a cache keyed by id.
+    pub placements: Vec<Placement>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageData {
+    pub id: u32,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Placement {
+    pub image_id: u32,
+    pub placement_id: u32,
+    pub viewport_col: i32,
+    pub viewport_row: i32,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+    pub source_x: u32,
+    pub source_y: u32,
+    pub source_width: u32,
+    pub source_height: u32,
+    pub z: i32,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -131,6 +169,11 @@ pub struct Session {
     render_state: RenderState<'static>,
     row_iter: RowIterator<'static>,
     cell_iter: CellIterator<'static>,
+    placement_iter: PlacementIterator<'static>,
+    /// Image ids whose pixel data has already been shipped to the frontend.
+    /// The frontend caches images by id, so we only re-send pixels on first
+    /// sighting per session.
+    shipped_images: HashSet<u32>,
     modes: SharedModes,
 }
 
@@ -145,12 +188,21 @@ impl Session {
         app: AppHandle,
         rid: ResourceId,
     ) -> Result<Self> {
+        // libghostty-vt's PNG decoder slot is thread-local, so each session
+        // thread installs its own. Ignore "already set" errors when the same
+        // thread spawns multiple sessions (currently it never does).
+        let _ = set_png_decoder(Some(Box::new(PngDecoder)));
+
         let mut terminal = Terminal::new(TerminalOptions {
             cols,
             rows,
             max_scrollback: SCROLLBACK,
         })
         .context("ghostty terminal init failed")?;
+
+        terminal
+            .set_kitty_image_storage_limit(KITTY_STORAGE_LIMIT)
+            .context("setting kitty image storage limit failed")?;
 
         terminal
             .on_pty_write(move |_term, data| {
@@ -174,6 +226,8 @@ impl Session {
             render_state: RenderState::new().context("render state init failed")?,
             row_iter: RowIterator::new().context("row iterator init failed")?,
             cell_iter: CellIterator::new().context("cell iterator init failed")?,
+            placement_iter: PlacementIterator::new().context("placement iterator init failed")?,
+            shipped_images: HashSet::new(),
             modes,
         };
         me.refresh_modes();
@@ -189,9 +243,18 @@ impl Session {
     }
 
     /// Mirror a window resize from the frontend into the ghostty grid.
-    pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
+    /// `cell_width_px` / `cell_height_px` are needed by libghostty-vt so kitty
+    /// graphics placements can resolve their grid sizes into pixel dimensions
+    /// (`placement_render_info().pixel_width` is zero without them).
+    pub fn resize(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        cell_width_px: u32,
+        cell_height_px: u32,
+    ) -> Result<()> {
         self.terminal
-            .resize(cols, rows, 0, 0)
+            .resize(cols, rows, cell_width_px, cell_height_px)
             .context("ghostty terminal resize failed")?;
         Ok(())
     }
@@ -280,6 +343,7 @@ impl Session {
             }
             y += 1;
         }
+        let (images, placements) = self.collect_kitty_graphics()?;
 
         Ok(Some(Frame {
             cols,
@@ -289,7 +353,132 @@ impl Session {
             full,
             cursor,
             dirty,
+            images,
+            placements,
         }))
+    }
+
+    /// Walk libghostty-vt's kitty graphics placement list and convert it into
+    /// frame-shippable shape. Pixel data is base64-encoded RGBA and only
+    /// included for image ids the frontend hasn't seen this session.
+    fn collect_kitty_graphics(&mut self) -> Result<(Vec<ImageData>, Vec<Placement>)> {
+        let graphics = self
+            .terminal
+            .kitty_graphics()
+            .context("kitty_graphics handle failed")?;
+        let mut placement_it = self
+            .placement_iter
+            .update(&graphics)
+            .context("placement iterator update failed")?;
+        let mut images = Vec::new();
+        let mut placements = Vec::new();
+        while let Some(p) = placement_it.next() {
+            let image_id = p.image_id().context("placement image_id failed")?;
+            let Some(image) = graphics.image(image_id) else {
+                continue;
+            };
+            let info = p
+                .placement_render_info(&image, &self.terminal)
+                .context("placement_render_info failed")?;
+            if !info.viewport_visible {
+                continue;
+            }
+            placements.push(Placement {
+                image_id,
+                placement_id: p.placement_id().context("placement_id failed")?,
+                viewport_col: info.viewport_col,
+                viewport_row: info.viewport_row,
+                pixel_width: info.pixel_width,
+                pixel_height: info.pixel_height,
+                source_x: info.source_x,
+                source_y: info.source_y,
+                source_width: info.source_width,
+                source_height: info.source_height,
+                z: p.z().context("placement z failed")?,
+            });
+
+            if self.shipped_images.insert(image_id) {
+                let width = image.width().context("image width failed")?;
+                let height = image.height().context("image height failed")?;
+                let format = image.format().context("image format failed")?;
+                let raw = image.data().context("image data failed")?;
+                if let Some(rgba) = to_rgba(raw, format, width, height) {
+                    images.push(ImageData {
+                        id: image_id,
+                        width,
+                        height,
+                        rgba: BASE64.encode(&rgba),
+                    });
+                }
+            }
+        }
+        Ok((images, placements))
+    }
+}
+
+/// Convert a kitty graphics pixel buffer to 8-bit RGBA. Returns `None` for
+/// formats we don't handle (currently only PNG, which the decoder upstream
+/// already turns into RGBA before storage).
+fn to_rgba(raw: &[u8], format: ImageFormat, width: u32, height: u32) -> Option<Vec<u8>> {
+    let pixels = (width as usize).checked_mul(height as usize)?;
+    match format {
+        ImageFormat::Rgba => Some(raw.to_vec()),
+        ImageFormat::Rgb => {
+            let mut out = Vec::with_capacity(pixels * 4);
+            for chunk in raw.chunks_exact(3) {
+                out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+            }
+            Some(out)
+        }
+        ImageFormat::GrayAlpha => {
+            let mut out = Vec::with_capacity(pixels * 4);
+            for chunk in raw.chunks_exact(2) {
+                out.extend_from_slice(&[chunk[0], chunk[0], chunk[0], chunk[1]]);
+            }
+            Some(out)
+        }
+        ImageFormat::Gray => {
+            let mut out = Vec::with_capacity(pixels * 4);
+            for &g in raw {
+                out.extend_from_slice(&[g, g, g, 255]);
+            }
+            Some(out)
+        }
+        ImageFormat::Png => None,
+        _ => None,
+    }
+}
+
+/// PNG → RGBA8 decoder plugged into libghostty-vt's kitty graphics pipeline.
+/// Pixel data must be allocated through the provided `Allocator` so the
+/// resulting `DecodedImage` lives inside the terminal's storage arena.
+struct PngDecoder;
+
+impl DecodePng for PngDecoder {
+    fn decode_png<'alloc>(
+        &mut self,
+        alloc: &'alloc Allocator<'_>,
+        data: &[u8],
+    ) -> Option<DecodedImage<'alloc>> {
+        use png::{ColorType, Decoder, Transformations};
+        let mut decoder = Decoder::new(std::io::Cursor::new(data));
+        // libghostty only ingests 8-bit RGBA, so normalise everything up-front.
+        decoder.set_transformations(
+            Transformations::EXPAND | Transformations::STRIP_16 | Transformations::ALPHA,
+        );
+        let mut reader = decoder.read_info().ok()?;
+        let info = reader.info();
+        let width = info.width;
+        let height = info.height;
+        let mut buf = Bytes::new_with_alloc(alloc, reader.output_buffer_size()).ok()?;
+        let frame_info = reader.next_frame(&mut buf).ok()?;
+        debug_assert_eq!(frame_info.color_type, ColorType::Rgba);
+        debug_assert_eq!(frame_info.bit_depth, png::BitDepth::Eight);
+        Some(DecodedImage {
+            width,
+            height,
+            data: buf,
+        })
     }
 }
 
