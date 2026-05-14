@@ -44,6 +44,7 @@ pub fn run() {
                 .expect("failed to apply window vibrancy");
                 macos::refresh_rate::install(&main);
                 macos::system_appearance::install(&main);
+                macos::native_tabs::install(&main);
                 accent::install_observer(app.handle().clone());
             }
 
@@ -57,7 +58,12 @@ pub fn run() {
             get_config,
             read_user_theme,
             get_accent_color,
-            set_window_appearance
+            set_window_appearance,
+            macos::native_tabs::native_tabs_new_tab,
+            macos::native_tabs::native_tabs_select_next,
+            macos::native_tabs::native_tabs_select_previous,
+            macos::native_tabs::native_tabs_merge_all,
+            macos::native_tabs::native_tabs_move_to_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
