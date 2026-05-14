@@ -136,16 +136,16 @@ function mouseButton(e: MouseEvent): number | undefined {
 function mouseSize(anchor: Anchor) {
     const rect = anchor.getBoundingClientRect();
     return {
-        screen_width: Math.max(1, Math.round(rect.width)),
-        screen_height: Math.max(1, Math.round(rect.height)),
+        screenWidth: Math.max(1, Math.round(rect.width)),
+        screenHeight: Math.max(1, Math.round(rect.height)),
     };
 }
 
 function cellSize(anchor: Anchor, cols: number, rows: number) {
     const rect = anchor.getBoundingClientRect();
     return {
-        cell_width: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
-        cell_height: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
+        cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
+        cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
     };
 }
 

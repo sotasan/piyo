@@ -70,7 +70,7 @@ function packAttrs(flags: number, fgRgb: Rgb | null, bgRgb: Rgb | null) {
 export function applyGhosttyFrame(term: Terminal, frame: GhosttyFrame): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const core = (term as unknown as { _core: any })._core;
-    const buffer = core?.buffer?.active;
+    const buffer = core?.buffer;
     if (!buffer) return;
 
     let minRow = Number.POSITIVE_INFINITY;
