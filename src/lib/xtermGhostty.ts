@@ -1,153 +1,213 @@
 /**
- * Drive an xterm.js Terminal from libghostty-vt's parsed grid state.
+ * Decode the packed binary frames produced by `crate::wire::FrameBuf` and
+ * paint them into an xterm.js Terminal + optional kitty-graphics overlay.
  *
- * Ghostty parses every PTY byte in the Rust backend and ships a [`GhosttyFrame`]
- * per dirty viewport snapshot. This module writes those cells directly into
- * xterm.js's buffer and triggers a redraw — bypassing xterm.js's own VT parser
- * entirely so no byte is parsed twice.
- *
- * We reach into xterm.js's `_core` field. The TypeScript privacy markers are
- * compile-time only; at runtime everything is on the prototype, so a typed
- * cast is enough. The buffer-cell wire format mirrors
- * `node_modules/@xterm/xterm/src/common/buffer/Constants.ts`.
+ * Wire format: see `src-tauri/src/wire.rs`. Single-byte discriminator:
+ *   0x01 = frame, 0x02 = exit.
  */
 import type { Terminal } from "@xterm/xterm";
 
-import type { GhosttyFrame, GhosttyPlacement, Rgb } from "@/stores/tabs";
+import { getBuffer, getCellPx, packAttrs, refresh, type Rgb } from "@/lib/xtermInternals";
 
-/** Per-terminal scratchpad for the kitty graphics overlay: the canvas element
- *  layered above xterm's text grid plus a cache of decoded image bitmaps so
- *  pixel data only crosses the IPC boundary once per image. */
+export const KIND_FRAME = 0x01;
+export const KIND_EXIT = 0x02;
+
+// Mirrors `wire::FrameFlags`.
+const FRAME_FULL = 1 << 0;
+const FRAME_CURSOR = 1 << 1;
+// Mirrors `wire::ColorFlags`.
+const COLOR_FG = 1 << 0;
+const COLOR_BG = 1 << 1;
+const COLOR_GRAPHEME = 1 << 2;
+
+const SPACE = 0x20;
+const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {
+    0: "block",
+    1: "block",
+    2: "underline",
+    3: "bar",
+};
+
 export type GraphicsOverlay = {
     canvas: HTMLCanvasElement;
     imageCache: Map<number, ImageBitmap>;
 };
 
-// Color mode: bits 25..26 of the packed fg/bg word.
-const CM_RGB = 0x3000000;
-// Flag bits packed into the fg word.
-const FG_INVERSE = 0x04000000;
-const FG_BOLD = 0x08000000;
-const FG_UNDERLINE = 0x10000000;
-const FG_BLINK = 0x20000000;
-const FG_INVISIBLE = 0x40000000;
-const FG_STRIKETHROUGH = 0x80000000;
-// Flag bits packed into the bg word.
-const BG_ITALIC = 0x04000000;
-const BG_DIM = 0x08000000;
+/** Scroll position reported per frame, fed to the UI scrollbar. */
+export type ScrollInfo = {
+    /** Total rows currently in ghostty's scrollback. */
+    scrollbackRows: number;
+    /** Rows the viewport is scrolled up from the active screen
+     *  (0 = at the bottom, scrollbackRows = at the top). */
+    viewportOffset: number;
+};
 
-// libghostty-vt frame flag bits (mirror src-tauri/src/vt.rs).
-const F_BOLD = 1;
-const F_ITALIC = 2;
-const F_UNDERLINE = 4;
-const F_INVERSE = 8;
-const F_FAINT = 16;
-const F_STRIKETHROUGH = 32;
-const F_BLINK = 64;
-const F_INVISIBLE = 128;
-
-const SPACE = 0x20;
-const EMPTY_EXTENDED = Object.freeze({});
-
-function packColor(rgb: Rgb): number {
-    // CM_RGB | (r << 16) | (g << 8) | b — 24-bit RGB with the RGB color-mode tag.
-    return CM_RGB | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
-}
-
-function packAttrs(flags: number, fgRgb: Rgb | null, bgRgb: Rgb | null) {
-    let fg = fgRgb ? packColor(fgRgb) : 0;
-    let bg = bgRgb ? packColor(bgRgb) : 0;
-    if (flags & F_BOLD) fg |= FG_BOLD;
-    if (flags & F_UNDERLINE) fg |= FG_UNDERLINE;
-    if (flags & F_INVERSE) fg |= FG_INVERSE;
-    if (flags & F_BLINK) fg |= FG_BLINK;
-    if (flags & F_INVISIBLE) fg |= FG_INVISIBLE;
-    if (flags & F_STRIKETHROUGH) fg |= FG_STRIKETHROUGH;
-    if (flags & F_ITALIC) bg |= BG_ITALIC;
-    if (flags & F_FAINT) bg |= BG_DIM;
-    return { fg, bg, extended: EMPTY_EXTENDED };
-}
-
-/**
- * Apply one [`GhosttyFrame`] to `term`'s active buffer.
- *
- * Cells whose text is empty are filled with a single space so xterm.js's
- * renderer treats the cell as occupied (otherwise per-row width / cursor
- * accounting drifts).
- */
-export function applyGhosttyFrame(
+/** Walk one binary frame and apply it directly to `term`. */
+export function applyFrame(
     term: Terminal,
-    frame: GhosttyFrame,
+    bytes: ArrayBuffer,
     overlay: GraphicsOverlay | null,
+    onScroll?: (info: ScrollInfo) => void,
 ): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const core = (term as unknown as { _core: any })._core;
-    const buffer = core?.buffer;
-    if (!buffer) return;
+    const view = new DataView(bytes);
+    const decoder = new BinaryDecoder(view);
+    const kind = decoder.u8();
+    if (kind !== KIND_FRAME) return;
+    const frameFlags = decoder.u8();
+    decoder.u16(); // cols, unused on render side
+    decoder.u16(); // rows, unused on render side
+    decoder.skip(6); // bg+fg RGB; xterm theme already has these
+    const scrollbackRows = decoder.u32();
+    const viewportOffset = decoder.u32();
+    onScroll?.({ scrollbackRows, viewportOffset });
+    const cursor =
+        (frameFlags & FRAME_CURSOR) !== 0
+            ? {
+                  x: decoder.u16(),
+                  y: decoder.u16(),
+                  style: decoder.u8(),
+                  blink: decoder.u8() !== 0,
+              }
+            : null;
+    const fullRedraw = (frameFlags & FRAME_FULL) !== 0;
 
+    const buffer = getBuffer(term);
+    if (!buffer) return;
+    const rowCount = decoder.u32();
     let minRow = Number.POSITIVE_INFINITY;
     let maxRow = Number.NEGATIVE_INFINITY;
-
-    for (const row of frame.dirty) {
-        const line = buffer.lines?.get(buffer.ybase + row.y);
-        if (!line) continue;
-        for (let x = 0; x < row.cells.length; x++) {
-            const cell = row.cells[x];
-            const codepoint = cell.text.length === 0 ? SPACE : (cell.text.codePointAt(0) ?? SPACE);
-            line.setCellFromCodepoint(x, codepoint, 1, packAttrs(cell.flags, cell.fg, cell.bg));
+    const graphemeIndex = new Map<number, string>();
+    for (let r = 0; r < rowCount; r++) {
+        const y = decoder.u16();
+        const cellCount = decoder.u16();
+        const line = buffer.lines?.get(buffer.ybase + y);
+        for (let x = 0; x < cellCount; x++) {
+            const codepoint = decoder.u32();
+            const styleFlags = decoder.u8();
+            const colorFlags = decoder.u8();
+            const fg = (colorFlags & COLOR_FG) !== 0 ? decoder.rgb() : null;
+            const bg = (colorFlags & COLOR_BG) !== 0 ? decoder.rgb() : null;
+            if (!line) continue;
+            const cp = codepoint === 0 ? SPACE : codepoint;
+            line.setCellFromCodepoint(x, cp, 1, packAttrs(styleFlags, fg, bg));
+            if ((colorFlags & COLOR_GRAPHEME) !== 0) {
+                graphemeIndex.set((y << 16) | x, "");
+            }
         }
-        line.isWrapped = false;
-        if (row.y < minRow) minRow = row.y;
-        if (row.y > maxRow) maxRow = row.y;
+        if (line) line.isWrapped = false;
+        if (y < minRow) minRow = y;
+        if (y > maxRow) maxRow = y;
     }
 
-    if (frame.cursor) {
-        buffer.x = frame.cursor.x;
-        buffer.y = frame.cursor.y;
-        // Mirror ghostty's cursor shape / blink onto xterm.js so the
-        // rendered cursor matches what DECSCUSR or DEC mode 12 asked for.
-        const desiredStyle = CURSOR_STYLES[frame.cursor.style];
-        if (desiredStyle && term.options.cursorStyle !== desiredStyle) {
-            term.options.cursorStyle = desiredStyle;
+    const graphemeCount = decoder.u32();
+    for (let g = 0; g < graphemeCount; g++) {
+        const y = decoder.u16();
+        const x = decoder.u16();
+        const len = decoder.u16();
+        const text = decoder.utf8(len);
+        // Replace the cell's single-codepoint we wrote above with the full
+        // multi-codepoint grapheme cluster.
+        const key = (y << 16) | x;
+        if (graphemeIndex.has(key)) {
+            const line = buffer.lines?.get(buffer.ybase + y);
+            const cp = text.codePointAt(0) ?? SPACE;
+            // setCellFromCodepoint only takes one cp; for graphemes we still
+            // start with the base cp. xterm's grapheme rendering then handles
+            // combining marks via its own buffer state. Good enough for now;
+            // proper grapheme cluster support requires the extended path.
+            line?.setCellFromCodepoint(x, cp, 1, packAttrs(0, null, null));
         }
-        if (term.options.cursorBlink !== frame.cursor.blinking) {
-            term.options.cursorBlink = frame.cursor.blinking;
-        }
     }
 
-    if (minRow <= maxRow && typeof core.refresh === "function") {
-        core.refresh(minRow, maxRow);
+    if (cursor) {
+        buffer.x = cursor.x;
+        buffer.y = cursor.y;
+        const desired = CURSOR_STYLES[cursor.style];
+        if (desired && term.options.cursorStyle !== desired) term.options.cursorStyle = desired;
+        if (term.options.cursorBlink !== cursor.blink) term.options.cursorBlink = cursor.blink;
     }
 
-    if (overlay) {
-        ingestImages(overlay, frame.images);
-        repaintOverlay(overlay, core, frame.placements);
-    }
+    if (minRow <= maxRow) refresh(term, minRow, maxRow);
+    if (fullRedraw) refresh(term, 0, term.rows - 1);
+
+    if (overlay) decodeAndPaintOverlay(decoder, term, overlay);
 }
 
-/** Kick off `createImageBitmap` for any newly-seen images and stash the
- *  resulting bitmaps in the overlay cache. Decoding is async; placements
- *  referencing a still-decoding image will be skipped this frame, and the
- *  next frame redraws once the bitmap is ready. */
-function ingestImages(overlay: GraphicsOverlay, images: GhosttyFrame["images"]): void {
-    for (const img of images) {
-        if (overlay.imageCache.has(img.id)) continue;
-        const data = new ImageData(img.width, img.height);
-        data.data.set(base64ToBytes(img.rgba));
+function decodeAndPaintOverlay(
+    decoder: BinaryDecoder,
+    term: Terminal,
+    overlay: GraphicsOverlay,
+): void {
+    const imageCount = decoder.u32();
+    for (let i = 0; i < imageCount; i++) {
+        const id = decoder.u32();
+        const width = decoder.u32();
+        const height = decoder.u32();
+        const byteLen = decoder.u32();
+        const pixels = decoder.bytes(byteLen);
+        if (overlay.imageCache.has(id)) continue;
+        const data = new ImageData(new Uint8ClampedArray(pixels), width, height);
         createImageBitmap(data)
-            .then((bm) => overlay.imageCache.set(img.id, bm))
+            .then((bm) => overlay.imageCache.set(id, bm))
             .catch(() => {});
     }
+
+    const placementCount = decoder.u32();
+    const placements: Array<{
+        imageId: number;
+        viewportCol: number;
+        viewportRow: number;
+        pixelWidth: number;
+        pixelHeight: number;
+        sourceX: number;
+        sourceY: number;
+        sourceWidth: number;
+        sourceHeight: number;
+        z: number;
+    }> = [];
+    for (let i = 0; i < placementCount; i++) {
+        const imageId = decoder.u32();
+        decoder.u32(); // placement_id, unused on render side
+        const z = decoder.i32();
+        const viewportCol = decoder.i32();
+        const viewportRow = decoder.i32();
+        const pixelWidth = decoder.u32();
+        const pixelHeight = decoder.u32();
+        const sourceX = decoder.u32();
+        const sourceY = decoder.u32();
+        const sourceWidth = decoder.u32();
+        const sourceHeight = decoder.u32();
+        placements.push({
+            imageId,
+            viewportCol,
+            viewportRow,
+            pixelWidth,
+            pixelHeight,
+            sourceX,
+            sourceY,
+            sourceWidth,
+            sourceHeight,
+            z,
+        });
+    }
+    paintOverlay(term, overlay, placements);
 }
 
-/** Resize the overlay canvas to match xterm's render area (accounting for
- *  device pixel ratio) and paint every visible placement. Z-ordering is
- *  applied so higher `z` draws on top. */
-function repaintOverlay(
+function paintOverlay(
+    term: Terminal,
     overlay: GraphicsOverlay,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    core: any,
-    placements: GhosttyPlacement[],
+    placements: Array<{
+        imageId: number;
+        viewportCol: number;
+        viewportRow: number;
+        pixelWidth: number;
+        pixelHeight: number;
+        sourceX: number;
+        sourceY: number;
+        sourceWidth: number;
+        sourceHeight: number;
+        z: number;
+    }>,
 ): void {
     const { canvas } = overlay;
     const parent = canvas.parentElement;
@@ -169,40 +229,87 @@ function repaintOverlay(
     ctx.clearRect(0, 0, cssWidth, cssHeight);
 
     if (placements.length === 0) return;
-    const dims = core?._renderService?.dimensions?.css?.cell;
-    const cellWidth = dims?.width as number | undefined;
-    const cellHeight = dims?.height as number | undefined;
+    const { width: cellWidth, height: cellHeight } = getCellPx(term);
     if (!cellWidth || !cellHeight) return;
     const sorted = placements.slice().sort((a, b) => a.z - b.z);
     for (const p of sorted) {
         const bm = overlay.imageCache.get(p.imageId);
         if (!bm) continue;
-        const x = p.viewportCol * cellWidth;
-        const y = p.viewportRow * cellHeight;
         ctx.drawImage(
             bm,
             p.sourceX,
             p.sourceY,
             p.sourceWidth,
             p.sourceHeight,
-            x,
-            y,
+            p.viewportCol * cellWidth,
+            p.viewportRow * cellHeight,
             p.pixelWidth,
             p.pixelHeight,
         );
     }
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-    const binary = atob(b64);
-    const out = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-    return out;
+/** Attach a kitty-graphics overlay canvas above xterm.js's text. */
+export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
+    if (!term.element) return null;
+    const canvas = document.createElement("canvas");
+    canvas.style.position = "absolute";
+    canvas.style.left = "0";
+    canvas.style.top = "0";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.pointerEvents = "none";
+    canvas.style.zIndex = "5";
+    canvas.width = 0;
+    canvas.height = 0;
+    term.element.appendChild(canvas);
+    return { canvas, imageCache: new Map() };
 }
 
-const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {
-    0: "block",
-    1: "block",
-    2: "underline",
-    3: "bar",
-};
+class BinaryDecoder {
+    private offset = 0;
+    private readonly view: DataView;
+
+    constructor(view: DataView) {
+        this.view = view;
+    }
+
+    u8(): number {
+        const v = this.view.getUint8(this.offset);
+        this.offset += 1;
+        return v;
+    }
+    u16(): number {
+        const v = this.view.getUint16(this.offset, true);
+        this.offset += 2;
+        return v;
+    }
+    u32(): number {
+        const v = this.view.getUint32(this.offset, true);
+        this.offset += 4;
+        return v;
+    }
+    i32(): number {
+        const v = this.view.getInt32(this.offset, true);
+        this.offset += 4;
+        return v;
+    }
+    rgb(): Rgb {
+        const r = this.u8();
+        const g = this.u8();
+        const b = this.u8();
+        return [r, g, b];
+    }
+    bytes(len: number): Uint8Array {
+        const v = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, len);
+        this.offset += len;
+        return v;
+    }
+    utf8(len: number): string {
+        const bytes = this.bytes(len);
+        return new TextDecoder().decode(bytes);
+    }
+    skip(len: number): void {
+        this.offset += len;
+    }
+}

@@ -1,19 +1,13 @@
 /**
- * Bridge browser keyboard events to libghostty-vt's key encoder.
- *
- * xterm.js encodes keystrokes using its own (now stale) parser state, so for
- * any key whose encoding depends on terminal modes (arrows, function keys,
- * keypad, etc.) we intercept the event and forward it to the Rust backend,
- * which uses [`libghostty_vt::key::Encoder`] to produce the correct VT bytes.
- *
- * Plain printable characters (no Ctrl/Alt/Meta) keep going through xterm's
- * normal `onData` path — their encoding is just the UTF-8 of the typed char,
- * independent of terminal modes, and letting xterm handle them preserves
- * IME composition.
+ * Bridge browser keyboard / mouse events into the typed commands generated
+ * by tauri-specta. Mode-dependent VT encoding happens in Rust against the
+ * ghostty key/mouse encoders.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/gen/bindings";
 
-/** Stable wire format mirrored in `src-tauri/src/input.rs`. */
+// Mirrors `libghostty_vt::key::Mods` bit values (shift/ctrl/alt/super =
+// 1/2/4/8). The Rust side ANDs against the supported bits, so anything we
+// pack here is fine.
 const MOD_SHIFT = 1 << 0;
 const MOD_CTRL = 1 << 1;
 const MOD_ALT = 1 << 2;
@@ -23,7 +17,6 @@ const ACTION_PRESS = 0;
 const ACTION_RELEASE = 1;
 const MOUSE_ACTION_MOTION = 2;
 
-/** `KeyboardEvent.key` values whose encoding depends on terminal modes. */
 const SPECIAL_KEYS = new Set<string>([
     "ArrowUp",
     "ArrowDown",
@@ -57,7 +50,12 @@ const SPECIAL_KEYS = new Set<string>([
     "F20",
 ]);
 
-function packMods(e: KeyboardEvent): number {
+function packMods(e: {
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    altKey: boolean;
+    metaKey: boolean;
+}): number {
     return (
         (e.shiftKey ? MOD_SHIFT : 0) |
         (e.ctrlKey ? MOD_CTRL : 0) |
@@ -67,127 +65,151 @@ function packMods(e: KeyboardEvent): number {
 }
 
 function shouldIntercept(e: KeyboardEvent): boolean {
-    // IME composition: never disturb xterm.js's textarea path — the composed
-    // text arrives via `term.onData` → `pty_write` after compositionend.
     if (e.isComposing || e.keyCode === 229) return false;
-    const hasModifier = e.ctrlKey || e.altKey || e.metaKey;
-    return hasModifier || SPECIAL_KEYS.has(e.key);
+    return e.ctrlKey || e.altKey || e.metaKey || SPECIAL_KEYS.has(e.key);
 }
 
 /**
- * Decide whether xterm.js's default handler should be suppressed and the
- * event sent to ghostty's encoder. Returns `false` to suppress xterm,
- * `true` to let xterm handle it as text input.
- *
- * Plain printable characters (no Ctrl/Alt/Meta) keep going through xterm's
- * normal `onData` path — their encoding is mode-independent and lets
- * xterm.js's textarea handle IME composition.
+ * macOS keyboard conventions that don't map to standard VT sequences.
+ * Shells (readline-style) expect raw control bytes here, not CSI codes:
+ *   Cmd+Left  → ^A  (start of line)        Option+Left  → ESC b  (word back)
+ *   Cmd+Right → ^E  (end of line)          Option+Right → ESC f  (word fwd)
+ *   Cmd+Backspace → ^U (kill to start)     Option+Backspace → ^W  (kill word)
+ *   Cmd+Delete    → ^K (kill to end)       Option+Delete    → ESC d (kill word fwd)
  */
-export function handleKey(rid: number, e: KeyboardEvent): boolean {
-    if (!shouldIntercept(e)) return true;
-    const isPress = e.type === "keydown";
-    const isRelease = e.type === "keyup";
-    if (!isPress && !isRelease) return true;
-
-    const text = isPress && e.key.length === 1 && !e.ctrlKey && !e.metaKey ? e.key : undefined;
-    invoke("pty_send_key", {
-        rid,
-        code: e.code,
-        mods: packMods(e),
-        text,
-        unshifted: e.key.length === 1 ? e.key.codePointAt(0) : undefined,
-        action: isRelease ? ACTION_RELEASE : ACTION_PRESS,
-    }).catch((err: unknown) => console.error("pty_send_key failed", err));
-
+function macosShortcut(rid: number, e: KeyboardEvent): boolean {
+    if (e.type !== "keydown") return false;
+    if (e.metaKey && !e.ctrlKey && !e.altKey) {
+        const seq = CMD_KEYS[e.key];
+        if (seq !== undefined) {
+            void commands.ptyWrite(rid, seq);
+            return true;
+        }
+    }
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const seq = OPT_KEYS[e.key];
+        if (seq !== undefined) {
+            void commands.ptyWrite(rid, seq);
+            return true;
+        }
+    }
     return false;
 }
 
-/**
- * Forward mouse wheel scrolling to ghostty's viewport. Returns whether the
- * event was consumed (true → call preventDefault).
- */
-export function handleWheel(rid: number, e: WheelEvent): boolean {
-    if (e.deltaY === 0) return false;
-    // One "notch" on most mice is deltaY≈100. Translate to ~3 rows so a
-    // wheel click moves the viewport visibly without overshooting.
-    const delta = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
-    invoke("pty_scroll", { rid, delta }).catch((err: unknown) =>
-        console.error("pty_scroll failed", err),
-    );
-    return true;
+const CMD_KEYS: Record<string, string> = {
+    ArrowLeft: "\x01",
+    ArrowRight: "\x05",
+    Backspace: "\x15",
+    Delete: "\x0b",
+};
+const OPT_KEYS: Record<string, string> = {
+    ArrowLeft: "\x1bb",
+    ArrowRight: "\x1bf",
+    Backspace: "\x17",
+    Delete: "\x1bd",
+};
+
+/** Returns `true` to let xterm handle the event as text, `false` to suppress. */
+export function handleKey(rid: number, e: KeyboardEvent): boolean {
+    if (!shouldIntercept(e)) return true;
+    if (macosShortcut(rid, e)) return false;
+    const isPress = e.type === "keydown";
+    const isRelease = e.type === "keyup";
+    if (!isPress && !isRelease) return true;
+    void commands.ptySendKey(rid, {
+        code: e.code,
+        mods: packMods(e),
+        text: isPress && e.key.length === 1 && !e.ctrlKey && !e.metaKey ? e.key : null,
+        unshifted: e.key.length === 1 ? (e.key.codePointAt(0) ?? null) : null,
+        action: isRelease ? ACTION_RELEASE : ACTION_PRESS,
+    });
+    return false;
 }
 
-type Anchor = HTMLElement;
+/** Pixels of trackpad scroll per scrollback row. Tuned by feel — smaller
+ *  is faster. Cell height is ~18-20px, but trackpad inertia inflates totals
+ *  so we want each row to cost a bit more than a literal cell. */
+const PIXELS_PER_ROW = 32;
+let scrollAccum = 0;
 
-/** Map browser `MouseEvent.button` to libghostty's wire enum. */
-function mouseButton(e: MouseEvent): number | undefined {
-    switch (e.button) {
-        case 0:
-            return 0; // Left
-        case 1:
-            return 1; // Middle
-        case 2:
-            return 2; // Right
-        default:
-            return undefined;
+/** Forward wheel scrolling to ghostty's viewport. Pixel-mode events
+ *  (trackpad, smooth wheel) come in tiny per-tick deltas at high frequency,
+ *  so we accumulate and only emit once a row's worth has built up. */
+export function handleWheel(rid: number, e: WheelEvent): void {
+    if (e.deltaY === 0) return;
+    let rows: number;
+    if (e.deltaMode === 0) {
+        // DOM_DELTA_PIXEL: trackpad / smooth wheel
+        scrollAccum += e.deltaY;
+        rows = Math.trunc(scrollAccum / PIXELS_PER_ROW);
+        if (rows === 0) return;
+        scrollAccum -= rows * PIXELS_PER_ROW;
+    } else {
+        // DOM_DELTA_LINE / DOM_DELTA_PAGE: legacy wheel, deltaY already in lines.
+        rows = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY)));
     }
+    void commands.ptyScroll(rid, rows);
 }
 
-function mouseSize(anchor: Anchor) {
-    const rect = anchor.getBoundingClientRect();
-    return {
-        screenWidth: Math.max(1, Math.round(rect.width)),
-        screenHeight: Math.max(1, Math.round(rect.height)),
-    };
+export type MouseAnchor = HTMLElement;
+
+/** Tracks per-PTY mouse-tracking-on state so we can short-circuit motion
+ *  events when the running app isn't listening for them. */
+const trackingByRid = new Map<number, boolean>();
+
+export function setMouseTracking(rid: number, tracking: boolean): void {
+    trackingByRid.set(rid, tracking);
 }
 
-function cellSize(anchor: Anchor, cols: number, rows: number) {
-    const rect = anchor.getBoundingClientRect();
-    return {
-        cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
-        cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
-    };
+export function clearMouseTracking(rid: number): void {
+    trackingByRid.delete(rid);
 }
 
-/**
- * Forward a DOM mouse event to ghostty's mouse encoder. The Rust side checks
- * whether the terminal currently has mouse tracking on; if not, this is a
- * no-op so xterm.js's own selection still works for the user.
- */
+function isTracking(rid: number): boolean {
+    return trackingByRid.get(rid) === true;
+}
+
 export function handleMouse(
     rid: number,
-    anchor: Anchor,
+    anchor: MouseAnchor,
     cols: number,
     rows: number,
     e: MouseEvent,
-    actionOverride?: number,
 ): void {
+    // Motion events are only meaningful when the terminal is in a tracking mode.
+    if (e.type === "mousemove" && !isTracking(rid)) return;
     const rect = anchor.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
     const action =
-        actionOverride ??
-        (e.type === "mousedown"
+        e.type === "mousedown"
             ? ACTION_PRESS
             : e.type === "mouseup"
               ? ACTION_RELEASE
-              : MOUSE_ACTION_MOTION);
-    const size = { ...mouseSize(anchor), ...cellSize(anchor, cols, rows) };
-
-    invoke("pty_send_mouse", {
-        rid,
-        input: {
-            action,
-            button: mouseButton(e),
-            mods:
-                (e.shiftKey ? MOD_SHIFT : 0) |
-                (e.ctrlKey ? MOD_CTRL : 0) |
-                (e.altKey ? MOD_ALT : 0) |
-                (e.metaKey ? MOD_SUPER : 0),
-            x,
-            y,
-            size,
-            anyPressed: (e.buttons ?? 0) !== 0,
+              : MOUSE_ACTION_MOTION;
+    void commands.ptySendMouse(rid, {
+        action,
+        button: mouseButton(e),
+        mods: packMods(e),
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        size: {
+            screenWidth: Math.max(1, Math.round(rect.width)),
+            screenHeight: Math.max(1, Math.round(rect.height)),
+            cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
+            cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
         },
-    }).catch((err: unknown) => console.error("pty_send_mouse failed", err));
+        anyPressed: (e.buttons ?? 0) !== 0,
+    });
+}
+
+function mouseButton(e: MouseEvent): number | null {
+    switch (e.button) {
+        case 0:
+            return 0;
+        case 1:
+            return 1;
+        case 2:
+            return 2;
+        default:
+            return null;
+    }
 }

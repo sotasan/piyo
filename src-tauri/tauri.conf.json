@@ -3,9 +3,9 @@
     "productName": "Piyo",
     "identifier": "sh.piyo",
     "build": {
-        "beforeDevCommand": "bun run dev",
+        "beforeDevCommand": "cargo run --bin gen_bindings --manifest-path src-tauri/Cargo.toml --quiet && bun run dev",
         "devUrl": "http://localhost:1420",
-        "beforeBuildCommand": "bun run build",
+        "beforeBuildCommand": "cargo run --bin gen_bindings --manifest-path src-tauri/Cargo.toml --quiet && bun run build",
         "frontendDist": "../dist"
     },
     "app": {

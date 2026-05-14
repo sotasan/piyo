@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { FitAddon } from "@xterm/addon-fit";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
@@ -6,23 +5,24 @@ import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
+import TerminalScrollbar from "@/components/TerminalScrollbar";
+import { commands } from "@/gen/bindings";
 import { i18next } from "@/lib/i18n";
-import { applyGhosttyFrame, type GraphicsOverlay } from "@/lib/xtermGhostty";
+import {
+    applyFrame,
+    attachGraphicsOverlay,
+    KIND_EXIT,
+    KIND_FRAME,
+    type GraphicsOverlay,
+    type ScrollInfo,
+} from "@/lib/xtermGhostty";
 import { handleKey, handleMouse, handleWheel } from "@/lib/xtermInput";
+import { getCellPx } from "@/lib/xtermInternals";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
-
-type AppConfig = {
-    font_family: string;
-    font_size: number;
-    theme: string;
-    terminal: {
-        padding: string;
-    };
-};
 
 type Props = {
     rid: number;
@@ -41,8 +41,9 @@ function fontStack(family: string): string {
 
 function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
+    const [scrollInfo, setScrollInfo] = useState<ScrollInfo | null>(null);
+    const [viewportRows, setViewportRows] = useState(24);
 
     const xtermTheme = useThemeStore((s) => s.theme?.xterm);
 
@@ -59,11 +60,11 @@ function Terminal({ rid, active, onResize }: Props) {
         if (!container) return;
 
         const ac = new AbortController();
-        let dispose: (() => void) | undefined;
+        const cleanups: Array<() => void> = [];
         let unsubChannel: (() => void) | undefined;
 
         (async () => {
-            const config = await invoke<AppConfig>("get_config");
+            const config = await commands.getConfig();
             if (ac.signal.aborted) return;
 
             const term = new XtermTerminal({
@@ -72,21 +73,26 @@ function Terminal({ rid, active, onResize }: Props) {
                 theme: buildTheme(),
                 cursorBlink: true,
                 quirks: { allowSetCursorBlink: true },
-                scrollbar: { width: 8 },
                 allowProposedApi: true,
-                // Ghostty owns the scrollback. xterm.js just renders the
-                // current viewport, so its own scrollback would be dead
-                // memory.
+                // Ghostty owns the scrollback; xterm.js just renders the
+                // current viewport. Our own <TerminalScrollbar /> overlay
+                // takes the place of xterm's native scrollbar.
                 scrollback: 0,
             });
             termRef.current = term;
+            cleanups.push(() => {
+                term.dispose();
+                termRef.current = null;
+            });
+
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    invoke("pty_write", { rid, data: "\x0c" });
+                    void commands.ptyWrite(rid, "\x0c");
                     return false;
                 }
                 return handleKey(rid, event);
             });
+
             const fit = new FitAddon();
             const webFonts = new WebFontsAddon();
             for (const addon of [
@@ -110,11 +116,7 @@ function Terminal({ rid, active, onResize }: Props) {
                     } catch {}
                 });
             });
-            dispose = () => {
-                ro.disconnect();
-                term.dispose();
-                termRef.current = null;
-            };
+            cleanups.push(() => ro.disconnect());
 
             await webFonts.loadFonts([FALLBACK_FONTS[0]]);
             if (ac.signal.aborted) return;
@@ -127,86 +129,63 @@ function Terminal({ rid, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
-            // Kitty graphics overlay canvas. xterm.js paints text into its own
-            // canvases inside term.element; this one sits above them and is
-            // driven directly from libghostty-vt's placement list. It's a child
-            // of term.element so it inherits the padding offset.
-            let overlay: GraphicsOverlay | null = null;
-            if (term.element) {
-                const canvas = document.createElement("canvas");
-                canvas.style.position = "absolute";
-                canvas.style.left = "0";
-                canvas.style.top = "0";
-                canvas.style.width = "100%";
-                canvas.style.height = "100%";
-                canvas.style.pointerEvents = "none";
-                canvas.style.zIndex = "5";
-                // Start with a zero backing buffer; the painter resizes to the
-                // parent's clientWidth/Height each frame.
-                canvas.width = 0;
-                canvas.height = 0;
-                term.element.appendChild(canvas);
-                canvasRef.current = canvas;
-                overlay = { canvas, imageCache: new Map() };
-                const prevDispose = dispose;
-                dispose = () => {
-                    canvas.remove();
-                    canvasRef.current = null;
-                    prevDispose?.();
-                };
+            let overlay: GraphicsOverlay | null = attachGraphicsOverlay(term);
+            if (overlay) {
+                const canvas = overlay.canvas;
+                cleanups.push(() => canvas.remove());
             }
 
-            const wheelHandler = (event: WheelEvent) => {
-                if (handleWheel(rid, event)) event.preventDefault();
+            const wheelHandler = (e: WheelEvent) => {
+                // Capture-phase + stopPropagation so xterm.js's wheel listener
+                // (which converts wheel → arrow keys in alt-buffer mode) never
+                // fires. Ghostty owns the viewport — trackpad must scroll the
+                // scrollback, not type arrows into the running program.
+                e.preventDefault();
+                e.stopPropagation();
+                handleWheel(rid, e);
             };
-            const mouseHandler = (event: MouseEvent) => {
-                handleMouse(rid, container, term.cols, term.rows, event);
+            const mouseHandler = (e: MouseEvent) => {
+                handleMouse(rid, container, term.cols, term.rows, e);
             };
-            container.addEventListener("wheel", wheelHandler, { passive: false });
+            container.addEventListener("wheel", wheelHandler, {
+                passive: false,
+                capture: true,
+            });
             container.addEventListener("mousedown", mouseHandler);
             container.addEventListener("mouseup", mouseHandler);
             container.addEventListener("mousemove", mouseHandler);
-            const prevDispose = dispose;
-            dispose = () => {
-                container.removeEventListener("wheel", wheelHandler);
+            cleanups.push(() => {
+                container.removeEventListener("wheel", wheelHandler, { capture: true });
                 container.removeEventListener("mousedown", mouseHandler);
                 container.removeEventListener("mouseup", mouseHandler);
                 container.removeEventListener("mousemove", mouseHandler);
-                prevDispose?.();
-            };
+            });
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
-                if (ac.signal.aborted) return;
-                if (event.kind === "frame") applyGhosttyFrame(term, event.data, overlay);
-                else if (event.kind === "exit")
+                if (ac.signal.aborted || !event) return;
+                const kind = new DataView(event).getUint8(0);
+                if (kind === KIND_FRAME) {
+                    applyFrame(term, event, overlay, setScrollInfo);
+                } else if (kind === KIND_EXIT) {
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
-            });
-            // Pull device-independent cell dimensions out of xterm's render
-            // service. libghostty-vt needs them to compute kitty graphics
-            // placement pixel sizes; chafa specifies its image as C= / R=
-            // grid cells, and without cell-px the rendered size collapses to
-            // zero.
-            const cellSize = () => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const dims = (term as unknown as { _core: any })._core?._renderService?.dimensions
-                    ?.css?.cell;
-                return {
-                    cellWidth: Math.max(1, Math.round((dims?.width as number) ?? 0)),
-                    cellHeight: Math.max(1, Math.round((dims?.height as number) ?? 0)),
-                };
-            };
-            term.onData((data) => invoke("pty_write", { rid, data }));
-            term.onResize(({ cols, rows }) => {
-                invoke("pty_resize", { rid, cols, rows, ...cellSize() });
-                handleResize(cols, rows);
+                }
             });
 
-            invoke("pty_resize", {
-                rid,
-                cols: term.cols,
-                rows: term.rows,
-                ...cellSize(),
+            const cellSize = () => {
+                const { width, height } = getCellPx(term);
+                return { cellWidth: width, cellHeight: height };
+            };
+            term.onData((data) => void commands.ptyWrite(rid, data));
+            term.onResize(({ cols, rows }) => {
+                const cell = cellSize();
+                void commands.ptyResize(rid, cols, rows, cell.cellWidth, cell.cellHeight);
+                setViewportRows(rows);
+                handleResize(cols, rows);
             });
+            setViewportRows(term.rows);
+
+            const cell = cellSize();
+            void commands.ptyResize(rid, term.cols, term.rows, cell.cellWidth, cell.cellHeight);
 
             focusIfActive(term);
         })();
@@ -214,7 +193,7 @@ function Terminal({ rid, active, onResize }: Props) {
         return () => {
             ac.abort();
             unsubChannel?.();
-            dispose?.();
+            for (const c of cleanups.reverse()) c();
         };
     }, [rid]);
 
@@ -237,6 +216,7 @@ function Terminal({ rid, active, onResize }: Props) {
             }}
         >
             <div ref={containerRef} className="absolute inset-0 overflow-hidden" />
+            <TerminalScrollbar rid={rid} viewportRows={viewportRows} info={scrollInfo} />
         </div>
     );
 }

@@ -1,7 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { ITheme } from "@xterm/xterm";
 import { bundledThemes, type BundledTheme } from "shiki";
 
+import { commands } from "@/gen/bindings";
 import { useThemeStore } from "@/stores/theme";
 
 const DEFAULT_THEME: BundledTheme = "rose-pine";
@@ -59,7 +59,7 @@ function pick(colors: Record<string, string>, keys: string[]): string | undefine
 }
 
 async function loadTheme(name: string): Promise<ShikiTheme> {
-    const userJson = await invoke<string | null>("read_user_theme", { name });
+    const userJson = await commands.readUserTheme(name);
     if (userJson) {
         try {
             return JSON.parse(userJson) as ShikiTheme;
@@ -119,9 +119,10 @@ export async function applyTheme(name: string): Promise<void> {
     const mode: "light" | "dark" = theme.type === "light" ? "light" : "dark";
     root.style.colorScheme = mode;
 
-    await invoke<void>("set_window_appearance", { mode }).catch((err) => {
-        console.warn("piyo: failed to set native window appearance", err);
-    });
+    const appearance = await commands.setWindowAppearance(mode);
+    if (appearance.status === "error") {
+        console.warn("piyo: failed to set native window appearance", appearance.error);
+    }
 
     useThemeStore.getState().set({
         name: theme.name ?? name,

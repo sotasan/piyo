@@ -1,9 +1,9 @@
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { invoke } from "@tauri-apps/api/core";
 import { Command } from "cmdk";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { commands } from "@/gen/bindings";
 import { applyTheme } from "@/lib/theme";
 import { applyAccent } from "@/stores/accent";
 
@@ -48,7 +48,7 @@ export default function CommandPalette() {
                 {mode === "commands" && (
                     <Command.Item
                         onSelect={async () => {
-                            const cfg = await invoke<{ theme: string }>("get_config");
+                            const cfg = await commands.getConfig();
                             await Promise.all([applyTheme(cfg.theme), applyAccent()]);
                             close();
                         }}

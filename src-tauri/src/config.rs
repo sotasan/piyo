@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use config::{Config, File, FileFormat};
 use etcetera::{AppStrategy, app_strategy::AppStrategyArgs, choose_app_strategy};
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 const DEFAULT_TOML: &str = include_str!("../config/default.toml");
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct Configuration {
     pub font_family: String,
     pub font_size: u16,
@@ -13,12 +14,13 @@ pub struct Configuration {
     pub terminal: TerminalConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct TerminalConfig {
     pub padding: String,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_config(config: tauri::State<'_, Configuration>) -> Configuration {
     config.inner().clone()
 }
@@ -33,7 +35,7 @@ pub fn app_strategy() -> Result<impl AppStrategy> {
 
 pub fn load() -> Configuration {
     try_load().unwrap_or_else(|err| {
-        eprintln!("config: {err:#}; falling back to defaults");
+        tracing::warn!(error = %err, "config load failed; falling back to defaults");
         toml::from_str(DEFAULT_TOML).expect("default.toml must parse")
     })
 }
