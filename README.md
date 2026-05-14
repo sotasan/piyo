@@ -15,6 +15,7 @@
 ## Features
 
 - ⚡ GPU-accelerated rendering
+- 👻 Ghostty-powered terminal engine
 - 🍎 Native macOS look and feel
 - 🌐 Multi-language support
 - ✨ Claude Code and Codex CLI integration
