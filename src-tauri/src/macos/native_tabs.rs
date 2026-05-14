@@ -4,6 +4,7 @@ mod imp {
 
     use objc2_app_kit::{NSApplication, NSWindow, NSWindowOrderingMode, NSWindowTabbingMode};
     use objc2_foundation::{MainThreadMarker, NSString};
+    use tauri::Manager;
 
     const TABBING_ID: &str = "sh.piyo.tab";
 
@@ -65,12 +66,8 @@ mod imp {
             let Ok(new_ptr) = new_win.ns_window() else {
                 return;
             };
-            let (main_ns, new_ns) = unsafe {
-                (
-                    as_ns_window(main_ptr as *mut _),
-                    as_ns_window(new_ptr),
-                )
-            };
+            let (main_ns, new_ns) =
+                unsafe { (as_ns_window(main_ptr as *mut _), as_ns_window(new_ptr)) };
             apply_tab_settings(new_ns);
             main_ns.addTabbedWindow_ordered(new_ns, NSWindowOrderingMode::Above);
         })
