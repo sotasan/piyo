@@ -104,8 +104,8 @@ function App() {
                 </Panel>
             </Group>
             <Titlebar
-                className="absolute inset-x-0 top-0 z-10"
-                style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX }}
+                className="absolute inset-x-0 top-0 z-10 gap-1"
+                style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX, paddingRight: 8 }}
             >
                 <SidebarToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (

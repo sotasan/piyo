@@ -51,15 +51,18 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
             {...attributes}
             {...listeners}
             className={[
-                "group relative flex-1 min-w-[60px] max-w-[200px] h-7 rounded-md",
-                "flex items-center pl-2 pr-6 text-xs",
-                "transition-colors",
+                "group relative flex-1 min-w-[60px] h-7 rounded-full",
+                "flex items-center px-7 text-xs",
                 isActive
-                    ? "bg-foreground/10 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-foreground/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),inset_0_-1px_0_rgb(0_0_0/0.15)] text-foreground"
+                    ? "glass bg-foreground/10 text-foreground"
                     : "text-foreground/60 hover:bg-foreground/10",
             ].join(" ")}
         >
-            <TabTitle cwd={cwd} title={tab.title} className="pointer-events-none flex-1" />
+            <TabTitle
+                cwd={cwd}
+                title={tab.title}
+                className="pointer-events-none flex-1 justify-center"
+            />
             <span
                 role="button"
                 aria-label="Close tab"
@@ -69,13 +72,14 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                     onClose(tab.id);
                 }}
                 className={[
-                    "absolute right-1 top-1/2 -translate-y-1/2",
-                    "size-4 flex items-center justify-center rounded-sm",
+                    "absolute right-1.5 top-1/2 -translate-y-1/2",
+                    "size-4 flex items-center justify-center rounded-full",
                     "opacity-0 group-hover:opacity-100",
                     "hover:bg-foreground/15",
-                    "icon-[lucide--x] text-foreground/80",
                 ].join(" ")}
-            />
+            >
+                <span aria-hidden className="icon-[lucide--x] size-3 text-foreground/80" />
+            </span>
         </button>
     );
 }
@@ -93,7 +97,7 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     };
 
     return (
-        <div data-tauri-drag-region className="flex h-11 flex-1 items-center gap-1 px-1">
+        <div data-tauri-drag-region className="flex h-11 flex-1 items-center gap-1">
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}

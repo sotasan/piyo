@@ -32,6 +32,10 @@
     }
 }
 
+@utility glass {
+    -apple-visual-effect: -apple-system-glass-material;
+}
+
 .xterm .xterm-viewport {
     background-color: transparent !important;
     scrollbar-width: none;
