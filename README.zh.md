@@ -15,6 +15,7 @@
 ## 功能特性
 
 - ⚡ GPU 加速渲染
+- 👻 Ghostty 驱动的终端引擎
 - 🍎 原生 macOS 外观与体验
 - 🌐 多语言支持
 - ✨ Claude Code 和 Codex CLI 集成
