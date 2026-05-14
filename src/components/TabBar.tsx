@@ -9,6 +9,7 @@ import {
 import { restrictToHorizontalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useEffect, useRef } from "react";
 
 import TabTitle from "@/components/TabTitle";
 import { useTabsStore } from "@/stores/tabs";
@@ -35,6 +36,21 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
         id: tab.id,
     });
     const cwd = useTabsStore((s) => s.cwds.get(tab.id) ?? "");
+    const nodeRef = useRef<HTMLButtonElement | null>(null);
+    const setRefs = (el: HTMLButtonElement | null) => {
+        setNodeRef(el);
+        nodeRef.current = el;
+    };
+
+    useEffect(() => {
+        if (isActive) {
+            nodeRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+                inline: "nearest",
+            });
+        }
+    }, [isActive]);
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -44,14 +60,14 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
 
     return (
         <button
-            ref={setNodeRef}
+            ref={setRefs}
             type="button"
             style={style}
             onClick={() => onActivate(tab.id)}
             {...attributes}
             {...listeners}
             className={[
-                "group relative flex-1 min-w-[60px] h-7 rounded-full",
+                "group relative flex-1 min-w-[120px] h-7 rounded-full",
                 "flex items-center px-7 text-xs",
                 isActive
                     ? "glass bg-foreground/10 text-foreground"
@@ -97,11 +113,15 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     };
 
     return (
-        <div data-tauri-drag-region className="flex h-11 flex-1 items-center gap-1">
+        <div
+            data-tauri-drag-region
+            className="flex h-11 min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        >
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+                autoScroll={{ threshold: { x: 0.2, y: 0 }, acceleration: 20 }}
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext
