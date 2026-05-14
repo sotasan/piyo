@@ -16,6 +16,7 @@
 
 - ⚡ GPU-accelerated rendering
 - 🍎 Native macOS look and feel
+- 🌐 Multi-language support
 - ✨ Claude Code and Codex CLI integration
 - 🐚 Bash, Zsh, Fish and Nushell integration
 - 🎨 Shiki-powered themes

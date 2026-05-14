@@ -16,6 +16,7 @@
 
 - ⚡ GPU アクセラレーションによる描画
 - 🍎 ネイティブな macOS の見た目と操作感
+- 🌐 多言語対応
 - ✨ Claude Code および Codex CLI 連携
 - 🐚 Bash、Zsh、Fish、Nushell に対応
 - 🎨 Shiki ベースのテーマ
