@@ -1,8 +1,5 @@
 #[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn piyo_install_context_menu();
-    fn piyo_install_refresh_rate(wk_webview: *mut std::ffi::c_void);
-}
+include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
 
 #[cfg(target_os = "macos")]
 pub mod context_menu {
@@ -17,6 +14,16 @@ pub mod refresh_rate {
         let _ = window.with_webview(|wv| {
             let ptr = wv.inner();
             unsafe { super::piyo_install_refresh_rate(ptr) };
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub mod system_appearance {
+    pub fn install<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+        let _ = window.with_webview(|wv| {
+            let ptr = wv.inner();
+            unsafe { super::piyo_install_system_appearance(ptr) };
         });
     }
 }

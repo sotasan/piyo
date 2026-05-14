@@ -1,4 +1,6 @@
 font_family = ""
 font_size = 15
-padding = "8px"
 theme = "rose-pine"
+
+[terminal]
+padding = "8px"

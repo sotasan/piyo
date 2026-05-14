@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
@@ -46,6 +46,13 @@ enum SessionMsg {
     Scroll(isize),
     Resize { cols: u16, rows: u16 },
     Shutdown,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtySpawned {
+    rid: ResourceId,
+    shell: String,
 }
 
 type ChildHandle = Arc<Mutex<Option<Box<dyn Child + Send + Sync>>>>;
@@ -142,21 +149,62 @@ fn hushlogin() -> bool {
         .unwrap_or(false)
 }
 
-fn apply_common_env(cmd: &mut CommandBuilder, bin_dir: &Path) {
+#[cfg(unix)]
+fn login_shell_from_passwd() -> Option<String> {
+    use uzers::os::unix::UserExt;
+    let user = uzers::get_user_by_uid(uzers::get_current_uid())?;
+    let shell = user.shell().to_str()?;
+    if shell.is_empty() {
+        None
+    } else {
+        Some(shell.to_owned())
+    }
+}
+
+#[cfg(not(unix))]
+fn login_shell_from_passwd() -> Option<String> {
+    None
+}
+
+fn resolve_shell_path() -> String {
+    std::env::var("SHELL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(login_shell_from_passwd)
+        .unwrap_or_else(|| "/bin/sh".into())
+}
+
+struct ResourceDirs {
+    integration: PathBuf,
+    bin: PathBuf,
+    scripts: PathBuf,
+}
+
+impl ResourceDirs {
+    fn from_resource_dir(resource_dir: &Path) -> Self {
+        Self {
+            integration: resource_dir.join("shell"),
+            bin: resource_dir.join("bin"),
+            scripts: resource_dir.join("scripts"),
+        }
+    }
+}
+
+fn apply_common_env(cmd: &mut CommandBuilder, dirs: &ResourceDirs) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", env!("CARGO_PKG_NAME"));
     cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into());
     cmd.env("LANG", lang);
-    cmd.env("PIYO_BIN", bin_dir);
+    cmd.env("PIYO_BIN", &dirs.bin);
+    cmd.env("PIYO_SCRIPTS", &dirs.scripts);
 }
 
 fn build_command(
     shell_path: &str,
     shell: &Shell,
-    integration_dir: &Path,
-    bin_dir: &Path,
+    dirs: &ResourceDirs,
     cwd: Option<&Path>,
 ) -> Result<CommandBuilder> {
     let user = whoami::username().context("failed to read current username")?;
@@ -168,9 +216,9 @@ fn build_command(
     cmd.arg("--noprofile");
     cmd.arg("--norc");
     cmd.arg("-c");
-    cmd.arg(shell.exec_inner(shell_path, integration_dir));
-    apply_common_env(&mut cmd, bin_dir);
-    shell.apply_env(&mut cmd, integration_dir);
+    cmd.arg(shell.exec_inner(shell_path, &dirs.integration));
+    apply_common_env(&mut cmd, dirs);
+    shell.apply_env(&mut cmd, &dirs.integration);
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
@@ -184,7 +232,7 @@ pub async fn pty_spawn(
     cols: u16,
     rows: u16,
     cwd: Option<String>,
-) -> CommandResult<ResourceId> {
+) -> CommandResult<PtySpawned> {
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,
@@ -194,16 +242,20 @@ pub async fn pty_spawn(
         })
         .context("failed to open pty")?;
 
-    let shell_path = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    let shell_path = resolve_shell_path();
+    let shell_name = Path::new(&shell_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sh")
+        .to_string();
     let shell = Shell::detect(&shell_path);
     let resource_dir = app
         .path()
         .resource_dir()
         .context("failed to resolve resource dir")?;
-    let integration_dir = resource_dir.join("shell");
-    let bin_dir = resource_dir.join("bin");
+    let dirs = ResourceDirs::from_resource_dir(&resource_dir);
     let cwd_path = cwd.as_ref().map(Path::new).filter(|p| p.is_dir());
-    let cmd = build_command(&shell_path, &shell, &integration_dir, &bin_dir, cwd_path)?;
+    let cmd = build_command(&shell_path, &shell, &dirs, cwd_path)?;
 
     let child = pair
         .slave
@@ -329,7 +381,10 @@ pub async fn pty_spawn(
         );
     });
 
-    Ok(rid)
+    Ok(PtySpawned {
+        rid,
+        shell: shell_name,
+    })
 }
 
 #[tauri::command]

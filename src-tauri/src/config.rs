@@ -9,8 +9,13 @@ const DEFAULT_TOML: &str = include_str!("../config/default.toml");
 pub struct Configuration {
     pub font_family: String,
     pub font_size: u16,
-    pub padding: String,
     pub theme: String,
+    pub terminal: TerminalConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalConfig {
+    pub padding: String,
 }
 
 #[tauri::command]

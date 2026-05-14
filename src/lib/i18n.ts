@@ -3,9 +3,10 @@ import { initReactI18next } from "react-i18next";
 
 import de from "@/locales/de.json";
 import en from "@/locales/en.json";
+import ja from "@/locales/ja.json";
 import zh from "@/locales/zh.json";
 
-const SUPPORTED = ["en", "de", "zh"] as const;
+const SUPPORTED = ["en", "de", "ja", "zh"] as const;
 type Supported = (typeof SUPPORTED)[number];
 
 export function pickLanguage(tag: string | null): Supported {
@@ -19,6 +20,7 @@ export function initI18n(tag: string | null): Promise<unknown> {
         resources: {
             en: { translation: en },
             de: { translation: de },
+            ja: { translation: ja },
             zh: { translation: zh },
         },
         lng: pickLanguage(tag),

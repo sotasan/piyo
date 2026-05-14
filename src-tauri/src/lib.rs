@@ -1,4 +1,5 @@
 mod accent;
+mod appearance;
 mod config;
 mod icon;
 mod input;
@@ -12,10 +13,11 @@ use tauri::Manager;
 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
 use accent::get_accent_color;
+use appearance::set_window_appearance;
 use config::get_config;
 use input::{pty_scroll, pty_send_key, pty_send_mouse};
 use pty::{pty_close, pty_resize, pty_spawn, pty_write};
-use theme::get_theme_css;
+use theme::read_user_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,6 +46,7 @@ pub fn run() {
                 )
                 .expect("failed to apply window vibrancy");
                 macos::refresh_rate::install(&main);
+                macos::system_appearance::install(&main);
                 accent::install_observer(app.handle().clone());
             }
 
@@ -58,8 +61,9 @@ pub fn run() {
             pty_send_mouse,
             pty_scroll,
             get_config,
-            get_theme_css,
-            get_accent_color
+            read_user_theme,
+            get_accent_color,
+            set_window_appearance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
