@@ -21,6 +21,8 @@
         background: transparent;
         user-select: none;
         -webkit-user-select: none;
+        overflow: hidden;
+        overscroll-behavior: none;
     }
 }
 
