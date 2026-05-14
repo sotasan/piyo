@@ -17,3 +17,13 @@ pub mod refresh_rate {
         });
     }
 }
+
+#[cfg(target_os = "macos")]
+pub mod system_appearance {
+    pub fn install<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+        let _ = window.with_webview(|wv| {
+            let ptr = wv.inner();
+            unsafe { super::piyo_install_system_appearance(ptr) };
+        });
+    }
+}

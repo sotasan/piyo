@@ -43,6 +43,7 @@ pub fn run() {
                 )
                 .expect("failed to apply window vibrancy");
                 macos::refresh_rate::install(&main);
+                macos::system_appearance::install(&main);
                 accent::install_observer(app.handle().clone());
             }
 
