@@ -44,7 +44,15 @@ pub enum PtyEvent {
 enum SessionMsg {
     Bytes(Vec<u8>),
     Scroll(isize),
-    Resize { cols: u16, rows: u16 },
+    Resize {
+        cols: u16,
+        rows: u16,
+        /// Pixel size of a single cell, in device-independent CSS pixels.
+        /// Required by libghostty-vt so kitty graphics placements can resolve
+        /// their grid-cell sizes (C= / R=) into pixel dimensions.
+        cell_width_px: u32,
+        cell_height_px: u32,
+    },
     Shutdown,
 }
 
@@ -363,8 +371,13 @@ pub async fn pty_spawn(
                         break;
                     }
                 }
-                SessionMsg::Resize { cols, rows } => {
-                    if let Err(e) = session.resize(cols, rows) {
+                SessionMsg::Resize {
+                    cols,
+                    rows,
+                    cell_width_px,
+                    cell_height_px,
+                } => {
+                    if let Err(e) = session.resize(cols, rows, cell_width_px, cell_height_px) {
                         eprintln!("ghostty resize error: {e:#}");
                     }
                 }
@@ -402,11 +415,20 @@ pub fn pty_write(app: AppHandle, rid: ResourceId, data: String) -> CommandResult
 }
 
 #[tauri::command]
-pub fn pty_resize(app: AppHandle, rid: ResourceId, cols: u16, rows: u16) -> CommandResult<()> {
+pub fn pty_resize(
+    app: AppHandle,
+    rid: ResourceId,
+    cols: u16,
+    rows: u16,
+    cell_width: Option<u32>,
+    cell_height: Option<u32>,
+) -> CommandResult<()> {
     let handle = app
         .resources_table()
         .get::<PtyHandle>(rid)
         .context("unknown pty rid")?;
+    let cell_width_px = cell_width.unwrap_or(0);
+    let cell_height_px = cell_height.unwrap_or(0);
     handle
         .master
         .lock()
@@ -414,13 +436,18 @@ pub fn pty_resize(app: AppHandle, rid: ResourceId, cols: u16, rows: u16) -> Comm
         .resize(PtySize {
             rows,
             cols,
-            pixel_width: 0,
-            pixel_height: 0,
+            pixel_width: u16::try_from(cell_width_px.saturating_mul(u32::from(cols)))
+                .unwrap_or(u16::MAX),
+            pixel_height: u16::try_from(cell_height_px.saturating_mul(u32::from(rows)))
+                .unwrap_or(u16::MAX),
         })
         .context("failed to resize pty")?;
-    let _ = handle
-        .session_sender()
-        .send(SessionMsg::Resize { cols, rows });
+    let _ = handle.session_sender().send(SessionMsg::Resize {
+        cols,
+        rows,
+        cell_width_px,
+        cell_height_px,
+    });
     Ok(())
 }
 

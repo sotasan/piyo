@@ -1,9 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
-import { ImageAddon } from "@xterm/addon-image";
-import { ProgressAddon } from "@xterm/addon-progress";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -13,7 +10,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { i18next } from "@/lib/i18n";
-import { applyGhosttyFrame } from "@/lib/xtermGhostty";
+import { applyGhosttyFrame, type GraphicsOverlay } from "@/lib/xtermGhostty";
 import { handleKey, handleMouse, handleWheel } from "@/lib/xtermInput";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
@@ -44,6 +41,7 @@ function fontStack(family: string): string {
 
 function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
 
     const xtermTheme = useThemeStore((s) => s.theme?.xterm);
@@ -95,9 +93,6 @@ function Terminal({ rid, active, onResize }: Props) {
                 fit,
                 webFonts,
                 new UnicodeGraphemesAddon(),
-                new ClipboardAddon(),
-                new ImageAddon(),
-                new ProgressAddon(),
                 new WebLinksAddon((event, uri) => {
                     event.preventDefault();
                     openUrl(uri);
@@ -132,6 +127,35 @@ function Terminal({ rid, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
+            // Kitty graphics overlay canvas. xterm.js paints text into its own
+            // canvases inside term.element; this one sits above them and is
+            // driven directly from libghostty-vt's placement list. It's a child
+            // of term.element so it inherits the padding offset.
+            let overlay: GraphicsOverlay | null = null;
+            if (term.element) {
+                const canvas = document.createElement("canvas");
+                canvas.style.position = "absolute";
+                canvas.style.left = "0";
+                canvas.style.top = "0";
+                canvas.style.width = "100%";
+                canvas.style.height = "100%";
+                canvas.style.pointerEvents = "none";
+                canvas.style.zIndex = "5";
+                // Start with a zero backing buffer; the painter resizes to the
+                // parent's clientWidth/Height each frame.
+                canvas.width = 0;
+                canvas.height = 0;
+                term.element.appendChild(canvas);
+                canvasRef.current = canvas;
+                overlay = { canvas, imageCache: new Map() };
+                const prevDispose = dispose;
+                dispose = () => {
+                    canvas.remove();
+                    canvasRef.current = null;
+                    prevDispose?.();
+                };
+            }
+
             const wheelHandler = (event: WheelEvent) => {
                 if (handleWheel(rid, event)) event.preventDefault();
             };
@@ -153,17 +177,36 @@ function Terminal({ rid, active, onResize }: Props) {
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
-                if (event.kind === "frame") applyGhosttyFrame(term, event.data);
+                if (event.kind === "frame") applyGhosttyFrame(term, event.data, overlay);
                 else if (event.kind === "exit")
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
             });
+            // Pull device-independent cell dimensions out of xterm's render
+            // service. libghostty-vt needs them to compute kitty graphics
+            // placement pixel sizes; chafa specifies its image as C= / R=
+            // grid cells, and without cell-px the rendered size collapses to
+            // zero.
+            const cellSize = () => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const dims = (term as unknown as { _core: any })._core?._renderService?.dimensions
+                    ?.css?.cell;
+                return {
+                    cellWidth: Math.max(1, Math.round((dims?.width as number) ?? 0)),
+                    cellHeight: Math.max(1, Math.round((dims?.height as number) ?? 0)),
+                };
+            };
             term.onData((data) => invoke("pty_write", { rid, data }));
             term.onResize(({ cols, rows }) => {
-                invoke("pty_resize", { rid, cols, rows });
+                invoke("pty_resize", { rid, cols, rows, ...cellSize() });
                 handleResize(cols, rows);
             });
 
-            invoke("pty_resize", { rid, cols: term.cols, rows: term.rows });
+            invoke("pty_resize", {
+                rid,
+                cols: term.cols,
+                rows: term.rows,
+                ...cellSize(),
+            });
 
             focusIfActive(term);
         })();

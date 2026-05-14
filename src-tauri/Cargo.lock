@@ -2955,6 +2955,7 @@ name = "piyo"
 version = "0.0.23"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "bindgen",
  "block2",
  "cached",
@@ -2966,6 +2967,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "percent-encoding",
+ "png 0.17.16",
  "portable-pty",
  "serde",
  "serde_json",
