@@ -16,6 +16,7 @@
 
 - ⚡ GPU-beschleunigtes Rendering
 - 🍎 Natives macOS-Erscheinungsbild
+- 🌐 Mehrsprachige Unterstützung
 - ✨ Claude-Code- und Codex-CLI-Integration
 - 🐚 Bash-, Zsh-, Fish- und Nushell-Integration
 - 🎨 Shiki-basierte Themes
