@@ -260,6 +260,11 @@ impl Session {
             .update(&snap)
             .context("updating row iterator failed")?;
         let mut y: u16 = 0;
+        // libghostty-vt's Snapshot::set / RowIteration::set helpers take the
+        // address of their `&T` parameter instead of the T, so set_dirty writes
+        // pointer bytes into the C-side state — the next dirty() read fails as
+        // InvalidValue. Skip resetting dirty and rely on the next update() to
+        // recompute it. Still present on master as of 2026-05-14.
         while let Some(row) = rows_iter.next() {
             let row_dirty = row.dirty().context("reading row dirty failed")?;
             if row_dirty || full {
@@ -272,12 +277,9 @@ impl Session {
                     cells.push(build_cell(cell)?);
                 }
                 dirty.push(Row { y, cells });
-                row.set_dirty(false).ok();
             }
             y += 1;
         }
-
-        snap.set_dirty(Dirty::Clean).ok();
 
         Ok(Some(Frame {
             cols,
