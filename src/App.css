@@ -55,18 +55,3 @@
 .xterm .xterm-decoration-overview-ruler {
     display: none !important;
 }
-
-/* Visual bell: brief inverted flash when the running app rings \x07.
-   The `data-bell` attribute is set for ~180ms by Terminal.tsx. */
-.xterm[data-bell="1"] {
-    animation: piyo-bell-flash 180ms ease-out;
-}
-
-@keyframes piyo-bell-flash {
-    0% {
-        filter: invert(0.15);
-    }
-    100% {
-        filter: invert(0);
-    }
-}
