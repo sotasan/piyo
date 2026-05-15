@@ -48,7 +48,12 @@ const SPECIAL_KEYS = new Set<string>([
 
 function shouldIntercept(e: KeyboardEvent): boolean {
     if (e.isComposing || e.keyCode === 229) return false;
-    return e.ctrlKey || e.altKey || e.metaKey || SPECIAL_KEYS.has(e.key);
+    // Cmd is reserved for app-level shortcuts on macOS (Cmd-Q, Cmd-T,
+    // Cmd-W, Cmd-N, copy/paste, …). Only route into the terminal when it
+    // matches one of the readline shortcuts we explicitly handle.
+    // Cmd-K and Cmd-F are intercepted upstream in useXterm.ts.
+    if (e.metaKey) return CMD_KEYS[e.key] !== undefined;
+    return e.ctrlKey || e.altKey || SPECIAL_KEYS.has(e.key);
 }
 
 /**
