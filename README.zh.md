@@ -16,11 +16,13 @@
 
 - ⚡ GPU 加速渲染
 - 👻 Ghostty 驱动的终端引擎
-- 🖼️ Kitty 图形协议
+- 🖼️ Kitty 图形与键盘协议
+- 🔤 完整的 Unicode 与表情符号支持
 - 🍎 原生 macOS 外观与体验
-- 🌐 多语言支持
+- 🗂️ 标签式终端会话
 - ✨ Claude Code 和 Codex CLI 集成
 - 🐚 支持 Bash、Zsh、Fish 和 Nushell
+- 🌐 多语言支持
 - 🎨 Shiki 驱动的主题
 - ⚙️ 基于 TOML 的用户配置
 
