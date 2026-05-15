@@ -19,7 +19,7 @@ import {
     repaintOverlay,
     type GraphicsOverlay,
 } from "@/lib/xtermGhostty";
-import { handleKey, handleMouse } from "@/lib/xtermInput";
+import { handleKey, handleMouse, handleWheel, onMouseTrackingChange } from "@/lib/xtermInput";
 import { getCellPx } from "@/lib/xtermInternals";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
@@ -163,13 +163,34 @@ function Terminal({ rid, active, onResize }: Props) {
             const mouseHandler = (e: MouseEvent) => {
                 handleMouse(rid, container, term.cols, term.rows, e);
             };
+            // Capture-phase wheel handler: if the running app has mouse
+            // tracking on, we encode the wheel as a mouse button event and
+            // stop xterm's own wheel handling. Otherwise (no tracking),
+            // we let xterm scroll its native scrollback.
+            const wheelHandler = (e: WheelEvent) => {
+                if (handleWheel(rid, container, term.cols, term.rows, e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            };
+            container.addEventListener("wheel", wheelHandler, {
+                passive: false,
+                capture: true,
+            });
             container.addEventListener("mousedown", mouseHandler);
             container.addEventListener("mouseup", mouseHandler);
             container.addEventListener("mousemove", mouseHandler);
+            // Swap the OS pointer between text-select (xterm default) and
+            // arrow when an app turns mouse tracking on, matching ghostty.
+            const unsubTracking = onMouseTrackingChange(rid, (tracking) => {
+                if (term.element) term.element.style.cursor = tracking ? "default" : "";
+            });
             cleanups.push(() => {
+                container.removeEventListener("wheel", wheelHandler, { capture: true });
                 container.removeEventListener("mousedown", mouseHandler);
                 container.removeEventListener("mouseup", mouseHandler);
                 container.removeEventListener("mousemove", mouseHandler);
+                unsubTracking();
             });
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
