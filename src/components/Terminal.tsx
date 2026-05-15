@@ -16,6 +16,7 @@ import {
     attachGraphicsOverlay,
     KIND_EXIT,
     KIND_FRAME,
+    repaintOverlay,
     type GraphicsOverlay,
 } from "@/lib/xtermGhostty";
 import { handleKey, handleMouse } from "@/lib/xtermInput";
@@ -86,6 +87,9 @@ function Terminal({ rid, active, onResize }: Props) {
 
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
+                    // Wipe xterm's scrollback then redraw the shell prompt
+                    // by sending Ctrl-L. Mirrors macOS Terminal / iTerm.
+                    term.clear();
                     void ptyWrite(rid, "\x0c");
                     return false;
                 }
@@ -93,7 +97,13 @@ function Terminal({ rid, active, onResize }: Props) {
                     setSearchOpen(true);
                     return false;
                 }
-                return handleKey(rid, event);
+                const letXtermHandle = handleKey(rid, event);
+                // When we intercept (handleKey returned false), xterm's input
+                // path doesn't run and won't auto-scroll. Snap back to the
+                // bottom on any keydown that produced input so the user sees
+                // what they're typing.
+                if (!letXtermHandle && event.type === "keydown") term.scrollToBottom();
+                return letXtermHandle;
             });
 
             const fit = new FitAddon();
@@ -141,7 +151,13 @@ function Terminal({ rid, active, onResize }: Props) {
             const overlay: GraphicsOverlay | null = attachGraphicsOverlay(term);
             if (overlay) {
                 const canvas = overlay.canvas;
-                cleanups.push(() => canvas.remove());
+                const scrollSub = term.onScroll(() => repaintOverlay(term, overlay));
+                cleanups.push(() => {
+                    scrollSub.dispose();
+                    for (const p of overlay.placements.values()) p.marker.dispose();
+                    overlay.placements.clear();
+                    canvas.remove();
+                });
             }
 
             const mouseHandler = (e: MouseEvent) => {

@@ -5,7 +5,7 @@
  * Wire format: see `src-tauri/src/wire.rs`. Single-byte discriminator:
  *   0x01 = frame, 0x02 = exit.
  */
-import type { Terminal } from "@xterm/xterm";
+import type { IMarker, Terminal } from "@xterm/xterm";
 
 import {
     getBuffer,
@@ -35,9 +35,32 @@ const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {
     3: "bar",
 };
 
+type TrackedPlacement = {
+    imageId: number;
+    /** Marker tied to the xterm row where this placement was first seen.
+     *  Follows the row through scrollback growth; disposed when xterm
+     *  trims that row off the end of its circular buffer, at which point
+     *  we drop the placement. */
+    marker: IMarker;
+    /** Column anchor in ghostty's viewport. */
+    col: number;
+    pixelWidth: number;
+    pixelHeight: number;
+    sourceX: number;
+    sourceY: number;
+    sourceWidth: number;
+    sourceHeight: number;
+    z: number;
+};
+
 export type GraphicsOverlay = {
     canvas: HTMLCanvasElement;
     imageCache: Map<number, ImageBitmap>;
+    /** Active placements keyed by `imageId:placementId`. Survives ghostty
+     *  no longer reporting them (e.g. after the placement scrolled off
+     *  the active region into history) so the image stays anchored to
+     *  its xterm row. */
+    placements: Map<string, TrackedPlacement>;
 };
 
 /** Walk one binary frame and apply it directly to `term`. */
@@ -145,26 +168,18 @@ function decodeAndPaintOverlay(
         if (overlay.imageCache.has(id)) continue;
         const data = new ImageData(new Uint8ClampedArray(pixels), width, height);
         createImageBitmap(data)
-            .then((bm) => overlay.imageCache.set(id, bm))
+            .then((bm) => {
+                overlay.imageCache.set(id, bm);
+                repaintOverlay(term, overlay);
+            })
             .catch(() => {});
     }
 
     const placementCount = decoder.u32();
-    const placements: Array<{
-        imageId: number;
-        viewportCol: number;
-        viewportRow: number;
-        pixelWidth: number;
-        pixelHeight: number;
-        sourceX: number;
-        sourceY: number;
-        sourceWidth: number;
-        sourceHeight: number;
-        z: number;
-    }> = [];
+    const cursorY = term.buffer.active.cursorY;
     for (let i = 0; i < placementCount; i++) {
         const imageId = decoder.u32();
-        decoder.u32(); // placement_id, unused on render side
+        const placementId = decoder.u32();
         const z = decoder.i32();
         const viewportCol = decoder.i32();
         const viewportRow = decoder.i32();
@@ -174,10 +189,15 @@ function decodeAndPaintOverlay(
         const sourceY = decoder.u32();
         const sourceWidth = decoder.u32();
         const sourceHeight = decoder.u32();
-        placements.push({
+        const key = `${imageId}:${placementId}`;
+        if (overlay.placements.has(key)) continue;
+        const marker = term.registerMarker(viewportRow - cursorY);
+        if (!marker) continue;
+        marker.onDispose(() => overlay.placements.delete(key));
+        overlay.placements.set(key, {
             imageId,
-            viewportCol,
-            viewportRow,
+            marker,
+            col: viewportCol,
             pixelWidth,
             pixelHeight,
             sourceX,
@@ -187,26 +207,13 @@ function decodeAndPaintOverlay(
             z,
         });
     }
-    paintOverlay(term, overlay, placements);
+    repaintOverlay(term, overlay);
 }
 
-function paintOverlay(
-    term: Terminal,
-    overlay: GraphicsOverlay,
-    placements: Array<{
-        imageId: number;
-        viewportCol: number;
-        viewportRow: number;
-        pixelWidth: number;
-        pixelHeight: number;
-        sourceX: number;
-        sourceY: number;
-        sourceWidth: number;
-        sourceHeight: number;
-        z: number;
-    }>,
-): void {
-    const { canvas } = overlay;
+/** Repaint cached placements. Called both from the per-frame path and from
+ *  xterm's scroll events so images shift with the user's scroll position. */
+export function repaintOverlay(term: Terminal, overlay: GraphicsOverlay): void {
+    const { canvas, placements } = overlay;
     const parent = canvas.parentElement;
     if (!parent) return;
     const cssWidth = parent.clientWidth;
@@ -225,28 +232,36 @@ function paintOverlay(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-    if (placements.length === 0) return;
+    if (placements.size === 0) return;
     const { width: cellWidth, height: cellHeight } = getCellPx(term);
     if (!cellWidth || !cellHeight) return;
-    const sorted = placements.slice().sort((a, b) => a.z - b.z);
+
+    const viewportY = term.buffer.active.viewportY;
+    const sorted = Array.from(placements.values()).sort((a, b) => a.z - b.z);
     for (const p of sorted) {
         const bm = overlay.imageCache.get(p.imageId);
         if (!bm) continue;
+        // marker.line is the placement's absolute row in xterm's buffer;
+        // subtract viewportY to get its visible y. Off-screen placements
+        // are still drawn — the canvas clips them.
+        const y = (p.marker.line - viewportY) * cellHeight;
         ctx.drawImage(
             bm,
             p.sourceX,
             p.sourceY,
             p.sourceWidth,
             p.sourceHeight,
-            p.viewportCol * cellWidth,
-            p.viewportRow * cellHeight,
+            p.col * cellWidth,
+            y,
             p.pixelWidth,
             p.pixelHeight,
         );
     }
 }
 
-/** Attach a kitty-graphics overlay canvas above xterm.js's text. */
+/** Attach a kitty-graphics overlay canvas above xterm.js's text. The
+ *  returned overlay must be repainted whenever the user scrolls xterm so
+ *  images stay anchored to ghostty's active-region rows. */
 export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
     if (!term.element) return null;
     const canvas = document.createElement("canvas");
@@ -260,7 +275,7 @@ export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
     canvas.width = 0;
     canvas.height = 0;
     term.element.appendChild(canvas);
-    return { canvas, imageCache: new Map() };
+    return { canvas, imageCache: new Map(), placements: new Map() };
 }
 
 class BinaryDecoder {
