@@ -6,6 +6,9 @@
 
 export type Rgb = readonly [number, number, number];
 
+// Reuse one decoder; default-mode `decode()` is stateless across calls.
+const UTF8_DECODER = new TextDecoder();
+
 export class BinaryDecoder {
     private offset = 0;
     private readonly view: DataView;
@@ -52,7 +55,7 @@ export class BinaryDecoder {
     }
 
     utf8(len: number): string {
-        return new TextDecoder().decode(this.bytes(len));
+        return UTF8_DECODER.decode(this.bytes(len));
     }
 
     skip(len: number): void {

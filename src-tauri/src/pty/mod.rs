@@ -151,6 +151,11 @@ pub async fn pty_spawn(
                 tracing::error!(error = %e, "ghostty vt session init failed");
                 // Run the same teardown the normal exit path uses so the
                 // child is reaped and the frontend learns the PTY died.
+                // Kill before reap — the shell process is still running and
+                // reap() only wait()s, so without kill it would block here.
+                if let Some(c) = child_for_reader.lock().unwrap().as_mut() {
+                    let _ = c.kill();
+                }
                 reap(&child_for_reader);
                 let _ = events.send(InvokeResponseBody::Raw(wire::exit_event()));
                 let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });

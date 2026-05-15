@@ -184,6 +184,10 @@ impl Session {
     fn snapshot(&mut self) -> Result<Option<Vec<u8>>> {
         let scrollback_rows = self.terminal.scrollback_rows().unwrap_or(0);
         let delta = scrollback_rows.saturating_sub(self.last_scrollback_rows);
+        // Track the current count unconditionally so the watermark follows
+        // shrinkage too (e.g. a future `\x1b[3J`). Otherwise the next growth
+        // would compute its delta against a stale high-water value.
+        self.last_scrollback_rows = scrollback_rows;
 
         let snap = self
             .render_state
@@ -209,7 +213,6 @@ impl Session {
         );
         if delta > 0 {
             buf.set_scrollback_promotions(u32::try_from(delta).unwrap_or(u32::MAX));
-            self.last_scrollback_rows = scrollback_rows;
         }
 
         // Bind cell_iter to a local so the borrow checker sees it as
@@ -271,6 +274,10 @@ impl Session {
         while let Some(p) = placement_it.next() {
             let image_id = p.image_id().context("placement image_id failed")?;
             let Some(image) = graphics.image(image_id) else {
+                // Image evicted from ghostty's storage. Drop our cache entry
+                // so we re-ship if the same id is later reused for a new
+                // image (kitty IDs are user-assignable).
+                self.shipped_images.remove(&image_id);
                 continue;
             };
             let info = p
@@ -293,13 +300,14 @@ impl Session {
                 info.source_height,
             );
 
-            if self.shipped_images.insert(image_id) {
+            if !self.shipped_images.contains(&image_id) {
                 let width = image.width().context("image width failed")?;
                 let height = image.height().context("image height failed")?;
                 let format = image.format().context("image format failed")?;
                 let raw = image.data().context("image data failed")?;
                 if let Some(rgba) = to_rgba(raw, format, width, height) {
                     buf.push_image(image_id, width, height, &rgba);
+                    self.shipped_images.insert(image_id);
                 }
             }
         }
