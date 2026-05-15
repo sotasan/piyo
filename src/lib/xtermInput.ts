@@ -121,16 +121,85 @@ export function handleKey(rid: number, e: KeyboardEvent): boolean {
 
 export type MouseAnchor = HTMLElement;
 
+/** Pixels of trackpad scroll per emitted wheel click. Trackpads on macOS
+ *  fire many tiny per-frame deltas; without accumulation a single swipe
+ *  emits dozens of wheel events. Tuned to feel like ghostty's default. */
+const PIXELS_PER_WHEEL_CLICK = 80;
+let wheelAccum = 0;
+
+/** Encode wheel scrolling as mouse-button events for apps that have mouse
+ *  tracking enabled (lazygit, htop, btop, vim with mouse=a, etc). Returns
+ *  true when we encoded; false to let xterm scroll its own scrollback. */
+export function handleWheel(
+    rid: number,
+    anchor: MouseAnchor,
+    cols: number,
+    rows: number,
+    e: WheelEvent,
+): boolean {
+    if (!isTracking(rid) || e.deltaY === 0) return false;
+
+    // Pixel-mode (trackpad / smooth wheel): accumulate and emit one click
+    // per threshold. Line/page-mode (legacy mouse wheel): pass through.
+    let clicks: number;
+    if (e.deltaMode === 0) {
+        wheelAccum += e.deltaY;
+        clicks = Math.trunc(wheelAccum / PIXELS_PER_WHEEL_CLICK);
+        if (clicks === 0) return true;
+        wheelAccum -= clicks * PIXELS_PER_WHEEL_CLICK;
+    } else {
+        clicks = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY)));
+    }
+
+    const rect = anchor.getBoundingClientRect();
+    const button = clicks < 0 ? 3 : 4; // Four = up, Five = down
+    const size = {
+        screenWidth: Math.max(1, Math.round(rect.width)),
+        screenHeight: Math.max(1, Math.round(rect.height)),
+        cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
+        cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
+    };
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const mods = packMods(e);
+    for (let i = 0; i < Math.abs(clicks); i++) {
+        void ptySendMouse(rid, {
+            action: ACTION_PRESS,
+            button,
+            mods,
+            x,
+            y,
+            size,
+            anyPressed: false,
+        });
+    }
+    return true;
+}
+
 /** Tracks per-PTY mouse-tracking-on state so we can short-circuit motion
- *  events when the running app isn't listening for them. */
+ *  events when the running app isn't listening for them, and so the UI
+ *  can swap the mouse pointer between I-beam and arrow. */
 const trackingByRid = new Map<number, boolean>();
+const trackingListeners = new Map<number, (tracking: boolean) => void>();
 
 export function setMouseTracking(rid: number, tracking: boolean): void {
+    if (trackingByRid.get(rid) === tracking) return;
     trackingByRid.set(rid, tracking);
+    trackingListeners.get(rid)?.(tracking);
 }
 
 export function clearMouseTracking(rid: number): void {
     trackingByRid.delete(rid);
+    trackingListeners.delete(rid);
+}
+
+/** Subscribe to mouse-tracking state changes for one rid. The callback
+ *  fires only on transitions. */
+export function onMouseTrackingChange(rid: number, cb: (tracking: boolean) => void): () => void {
+    trackingListeners.set(rid, cb);
+    return () => {
+        if (trackingListeners.get(rid) === cb) trackingListeners.delete(rid);
+    };
 }
 
 function isTracking(rid: number): boolean {
