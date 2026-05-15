@@ -1,7 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 import { bundledThemes, type BundledTheme } from "shiki";
 
-import { commands } from "@/gen/bindings";
+import { readUserTheme, setWindowAppearance } from "@/ipc/commands";
 import { useThemeStore } from "@/stores/theme";
 
 const DEFAULT_THEME: BundledTheme = "rose-pine";
@@ -59,7 +59,7 @@ function pick(colors: Record<string, string>, keys: string[]): string | undefine
 }
 
 async function loadTheme(name: string): Promise<ShikiTheme> {
-    const userJson = await commands.readUserTheme(name);
+    const userJson = await readUserTheme(name);
     if (userJson) {
         try {
             return JSON.parse(userJson) as ShikiTheme;
@@ -119,10 +119,9 @@ export async function applyTheme(name: string): Promise<void> {
     const mode: "light" | "dark" = theme.type === "light" ? "light" : "dark";
     root.style.colorScheme = mode;
 
-    const appearance = await commands.setWindowAppearance(mode);
-    if (appearance.status === "error") {
-        console.warn("piyo: failed to set native window appearance", appearance.error);
-    }
+    await setWindowAppearance(mode).catch((err: unknown) => {
+        console.warn("piyo: failed to set native window appearance", err);
+    });
 
     useThemeStore.getState().set({
         name: theme.name ?? name,

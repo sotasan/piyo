@@ -16,6 +16,7 @@
 
 - ⚡ GPU-accelerated rendering
 - 👻 Ghostty-powered terminal engine
+- 🖼️ Kitty graphics protocol
 - 🍎 Native macOS look and feel
 - 🌐 Multi-language support
 - ✨ Claude Code and Codex CLI integration

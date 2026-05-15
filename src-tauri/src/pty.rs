@@ -13,10 +13,8 @@ use libghostty_vt::{
 };
 use portable_pty::{MasterPty, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
-use specta::Type;
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::{AppHandle, Manager};
-use tauri_specta::Event;
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::keycode;
 use crate::osc::OscPerformer;
@@ -25,6 +23,18 @@ use crate::vt::{self, ModeListener, MouseFormat, MouseTracking, Session, TitleLi
 use crate::wire;
 
 const READ_BUF_SIZE: usize = 4096;
+
+pub const EVENT_PTY_TITLE: &str = "pty:title";
+pub const EVENT_PTY_CWD: &str = "pty:cwd";
+pub const EVENT_PTY_EXIT: &str = "pty:exit";
+pub const EVENT_PTY_MODES: &str = "pty:modes";
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyCwd {
+    pub rid: u32,
+    pub cwd: String,
+}
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -41,50 +51,36 @@ impl Serialize for CommandError {
     }
 }
 
-impl Type for CommandError {
-    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
-        String::definition(types)
-    }
-}
-
 pub type CommandResult<T> = Result<T, CommandError>;
 
-/// Emitted whenever ghostty's terminal modes change.
-#[derive(Clone, Debug, Serialize, Type, Event)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyModes {
     pub rid: u32,
     pub mouse_tracking: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Type, Event)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyTitle {
     pub rid: u32,
     pub title: String,
 }
 
-#[derive(Clone, Debug, Serialize, Type, Event)]
-#[serde(rename_all = "camelCase")]
-pub struct PtyCwd {
-    pub rid: u32,
-    pub cwd: String,
-}
-
-#[derive(Clone, Debug, Serialize, Type, Event)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyExit {
     pub rid: u32,
 }
 
-#[derive(Serialize, Type)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtySpawned {
     pub rid: u32,
     pub shell: String,
 }
 
-#[derive(Deserialize, Type)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyInput {
     pub code: String,
@@ -94,7 +90,7 @@ pub struct KeyInput {
     pub action: u8,
 }
 
-#[derive(Deserialize, Type)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MouseSize {
     pub screen_width: u32,
@@ -103,7 +99,7 @@ pub struct MouseSize {
     pub cell_height: u32,
 }
 
-#[derive(Deserialize, Type)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MouseEventInput {
     pub action: u8,
@@ -115,20 +111,12 @@ pub struct MouseEventInput {
     pub any_pressed: bool,
 }
 
-/// Frontend modifier wire format matches `libghostty_vt::key::Mods` bit values
-/// for shift/ctrl/alt/super (1/2/4/8); other bits are masked off.
 fn parse_mods(bits: u16) -> Mods {
     Mods::from_bits_truncate(bits) & (Mods::SHIFT | Mods::CTRL | Mods::ALT | Mods::SUPER)
 }
 
-/// Messages flowing into the session thread. The reader thread sends
-/// `Bytes` / `Shutdown`; Tauri commands send the rest. All session-state
-/// mutation happens on the session thread because the ghostty `Terminal`
-/// is `!Send`.
 enum SessionMsg {
     Bytes(Vec<u8>),
-    Scroll(isize),
-    ScrollTo(u32),
     Resize {
         cols: u16,
         rows: u16,
@@ -180,14 +168,6 @@ impl PtyHandle {
             cell_height_px: ch,
         });
         Ok(())
-    }
-
-    fn scroll(&self, delta: isize) {
-        self.send(SessionMsg::Scroll(delta));
-    }
-
-    fn scroll_to(&self, offset_up: u32) {
-        self.send(SessionMsg::ScrollTo(offset_up));
     }
 
     fn shutdown(&self) {
@@ -396,7 +376,6 @@ pub async fn pty_spawn(
         let _ = session_tx_for_reader.send(SessionMsg::Shutdown);
     });
 
-    // Session thread: owns the ghostty Terminal (which is `!Send`).
     let app_for_session = app.clone();
     std::thread::spawn(move || {
         let mode_listener = ModeEmit {
@@ -440,16 +419,6 @@ pub async fn pty_spawn(
                         break;
                     }
                 }
-                SessionMsg::Scroll(delta) => {
-                    if !emit_frame(session.scroll_viewport(delta)) {
-                        break;
-                    }
-                }
-                SessionMsg::ScrollTo(offset) => {
-                    if !emit_frame(session.scroll_to_offset(offset)) {
-                        break;
-                    }
-                }
                 SessionMsg::Resize {
                     cols,
                     rows,
@@ -466,7 +435,7 @@ pub async fn pty_spawn(
 
         reap(&child_for_reader);
         let _ = events.send(InvokeResponseBody::Raw(wire::exit_event()));
-        let _ = PtyExit { rid }.emit(&app_for_session);
+        let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });
     });
 
     Ok(PtySpawned {
@@ -476,14 +445,12 @@ pub async fn pty_spawn(
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn pty_write(app: AppHandle, rid: u32, data: String) -> CommandResult<()> {
     handle(&app, rid)?.write_pty(data.as_bytes())?;
     Ok(())
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn pty_resize(
     app: AppHandle,
     rid: u32,
@@ -502,7 +469,6 @@ pub fn pty_resize(
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn pty_close(app: AppHandle, rid: u32) -> CommandResult<()> {
     let Ok(h) = app.resources_table().get::<PtyHandle>(rid) else {
         return Ok(());
@@ -514,30 +480,14 @@ pub fn pty_close(app: AppHandle, rid: u32) -> CommandResult<()> {
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn pty_send_key(app: AppHandle, rid: u32, input: KeyInput) -> CommandResult<()> {
     handle(&app, rid)?.send_key(input)?;
     Ok(())
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn pty_send_mouse(app: AppHandle, rid: u32, input: MouseEventInput) -> CommandResult<()> {
     handle(&app, rid)?.send_mouse(input)?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn pty_scroll(app: AppHandle, rid: u32, delta: i32) -> CommandResult<()> {
-    handle(&app, rid)?.scroll(delta as isize);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn pty_scroll_to(app: AppHandle, rid: u32, offset_up: u32) -> CommandResult<()> {
-    handle(&app, rid)?.scroll_to(offset_up);
     Ok(())
 }
 
@@ -554,11 +504,13 @@ struct ModeEmit {
 }
 impl ModeListener for ModeEmit {
     fn on_modes(&self, modes: &vt::Modes) {
-        let _ = PtyModes {
-            rid: self.rid,
-            mouse_tracking: !matches!(modes.mouse_tracking, MouseTracking::None),
-        }
-        .emit(&self.app);
+        let _ = self.app.emit(
+            EVENT_PTY_MODES,
+            PtyModes {
+                rid: self.rid,
+                mouse_tracking: !matches!(modes.mouse_tracking, MouseTracking::None),
+            },
+        );
     }
 }
 
@@ -568,10 +520,12 @@ struct TitleEmit {
 }
 impl TitleListener for TitleEmit {
     fn on_title(&self, title: &str) {
-        let _ = PtyTitle {
-            rid: self.rid,
-            title: title.to_string(),
-        }
-        .emit(&self.app);
+        let _ = self.app.emit(
+            EVENT_PTY_TITLE,
+            PtyTitle {
+                rid: self.rid,
+                title: title.to_string(),
+            },
+        );
     }
 }

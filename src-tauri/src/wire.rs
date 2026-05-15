@@ -11,11 +11,14 @@
 //!   [u16 cols][u16 rows]
 //!   [u8 bg_r][u8 bg_g][u8 bg_b]
 //!   [u8 fg_r][u8 fg_g][u8 fg_b]
-//!   [u32 scrollback_rows]   total rows currently in ghostty scrollback
-//!   [u32 viewport_offset]   rows scrolled up from bottom (0 = at active)
 //!   if cursor present:
 //!     [u16 x][u16 y][u8 style][u8 blink]
-//!   [u32 row_count]
+//!   [u32 scrollback_promotions]   rows just evicted from active. Renderer
+//!                                  calls xterm.scroll() this many times
+//!                                  before writing the new active region;
+//!                                  no cell data needed because xterm
+//!                                  already has them at active row 0..N-1.
+//!   [u32 active_row_count]
 //!     per row: [u16 y][u16 cell_count]
 //!       per cell: [u32 codepoint][u8 style_flags][u8 color_flags]
 //!         color_flags bit 0: fg present, bit 1: bg present, bit 2: extended grapheme
@@ -39,8 +42,6 @@ pub const KIND_FRAME: u8 = 0x01;
 pub const KIND_EXIT: u8 = 0x02;
 
 bitflags! {
-    /// Cell style flags. Wire format: single byte per cell.
-    /// Mirrored to TS as exported constants via specta.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
     pub struct CellFlags: u8 {
         const BOLD          = 1 << 0;
@@ -59,8 +60,8 @@ bitflags! {
     pub struct ColorFlags: u8 {
         const FG       = 1 << 0;
         const BG       = 1 << 1;
-        /// Cell text spans multiple codepoints; the actual text lives in the
-        /// grapheme overlay.
+        /// Cell text spans multiple codepoints; the full grapheme cluster
+        /// lives in the grapheme overlay section.
         const GRAPHEME = 1 << 2;
     }
 }
@@ -73,13 +74,21 @@ bitflags! {
     }
 }
 
-/// Builder for one binary frame.
+#[derive(Clone, Copy)]
+pub struct Cell {
+    pub codepoint: u32,
+    pub flags: CellFlags,
+    pub fg: Option<RgbColor>,
+    pub bg: Option<RgbColor>,
+}
+
+/// Builder for one binary frame. Sections are buffered and concatenated by
+/// [`finish`], so callers can push them in any order.
 pub struct FrameBuf {
-    out: Vec<u8>,
-    /// Position of the row-count u32 placeholder so we can patch it after all
-    /// rows have been written.
-    row_count_pos: usize,
-    rows_written: u32,
+    header: Vec<u8>,
+    scrollback_promotions: u32,
+    active: Vec<u8>,
+    active_rows: u32,
     graphemes: Vec<u8>,
     grapheme_count: u32,
     images: Vec<u8>,
@@ -89,7 +98,6 @@ pub struct FrameBuf {
 }
 
 impl FrameBuf {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cols: u16,
         rows: u16,
@@ -97,11 +105,9 @@ impl FrameBuf {
         cursor: Option<(u16, u16, u8, bool)>,
         bg: RgbColor,
         fg: RgbColor,
-        scrollback_rows: u32,
-        viewport_offset: u32,
     ) -> Self {
-        let mut out = Vec::with_capacity(64);
-        out.push(KIND_FRAME);
+        let mut header = Vec::with_capacity(32);
+        header.push(KIND_FRAME);
         let mut flags = FrameFlags::empty();
         if full {
             flags |= FrameFlags::FULL;
@@ -109,24 +115,21 @@ impl FrameBuf {
         if cursor.is_some() {
             flags |= FrameFlags::CURSOR;
         }
-        out.push(flags.bits());
-        out.extend_from_slice(&cols.to_le_bytes());
-        out.extend_from_slice(&rows.to_le_bytes());
-        out.extend_from_slice(&[bg.r, bg.g, bg.b, fg.r, fg.g, fg.b]);
-        out.extend_from_slice(&scrollback_rows.to_le_bytes());
-        out.extend_from_slice(&viewport_offset.to_le_bytes());
+        header.push(flags.bits());
+        header.extend_from_slice(&cols.to_le_bytes());
+        header.extend_from_slice(&rows.to_le_bytes());
+        header.extend_from_slice(&[bg.r, bg.g, bg.b, fg.r, fg.g, fg.b]);
         if let Some((x, y, style, blink)) = cursor {
-            out.extend_from_slice(&x.to_le_bytes());
-            out.extend_from_slice(&y.to_le_bytes());
-            out.push(style);
-            out.push(u8::from(blink));
+            header.extend_from_slice(&x.to_le_bytes());
+            header.extend_from_slice(&y.to_le_bytes());
+            header.push(style);
+            header.push(u8::from(blink));
         }
-        let row_count_pos = out.len();
-        out.extend_from_slice(&0u32.to_le_bytes());
         Self {
-            out,
-            row_count_pos,
-            rows_written: 0,
+            header,
+            scrollback_promotions: 0,
+            active: Vec::new(),
+            active_rows: 0,
             graphemes: Vec::new(),
             grapheme_count: 0,
             images: Vec::new(),
@@ -136,42 +139,39 @@ impl FrameBuf {
         }
     }
 
-    pub fn start_row(&mut self, y: u16, cell_count: u16) {
-        self.out.extend_from_slice(&y.to_le_bytes());
-        self.out.extend_from_slice(&cell_count.to_le_bytes());
-        self.rows_written += 1;
+    pub fn set_scrollback_promotions(&mut self, count: u32) {
+        self.scrollback_promotions = count;
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn push_cell(
-        &mut self,
-        y: u16,
-        x: u16,
-        codepoint: u32,
-        flags: CellFlags,
-        fg: Option<RgbColor>,
-        bg: Option<RgbColor>,
-        extra_graphemes: &[char],
-    ) {
+    pub fn start_active_row(&mut self, y: u16, cell_count: u16) {
+        self.active.extend_from_slice(&y.to_le_bytes());
+        self.active.extend_from_slice(&cell_count.to_le_bytes());
+        self.active_rows += 1;
+    }
+
+    pub fn push_active_cell(&mut self, y: u16, x: u16, cell: &Cell, extras: &[char]) {
+        let has_extras = !extras.is_empty();
+        if has_extras {
+            self.push_grapheme(y, x, cell.codepoint, extras);
+        }
         let mut color = ColorFlags::empty();
-        if fg.is_some() {
+        if cell.fg.is_some() {
             color |= ColorFlags::FG;
         }
-        if bg.is_some() {
+        if cell.bg.is_some() {
             color |= ColorFlags::BG;
         }
-        if !extra_graphemes.is_empty() {
+        if has_extras {
             color |= ColorFlags::GRAPHEME;
-            self.push_grapheme(y, x, codepoint, extra_graphemes);
         }
-        self.out.extend_from_slice(&codepoint.to_le_bytes());
-        self.out.push(flags.bits());
-        self.out.push(color.bits());
-        if let Some(c) = fg {
-            self.out.extend_from_slice(&[c.r, c.g, c.b]);
+        self.active.extend_from_slice(&cell.codepoint.to_le_bytes());
+        self.active.push(cell.flags.bits());
+        self.active.push(color.bits());
+        if let Some(c) = cell.fg {
+            self.active.extend_from_slice(&[c.r, c.g, c.b]);
         }
-        if let Some(c) = bg {
-            self.out.extend_from_slice(&[c.r, c.g, c.b]);
+        if let Some(c) = cell.bg {
+            self.active.extend_from_slice(&[c.r, c.g, c.b]);
         }
     }
 
@@ -217,39 +217,33 @@ impl FrameBuf {
         source_width: u32,
         source_height: u32,
     ) {
-        self.placements.extend_from_slice(&image_id.to_le_bytes());
-        self.placements
-            .extend_from_slice(&placement_id.to_le_bytes());
-        self.placements.extend_from_slice(&z.to_le_bytes());
-        self.placements
-            .extend_from_slice(&viewport_col.to_le_bytes());
-        self.placements
-            .extend_from_slice(&viewport_row.to_le_bytes());
-        self.placements
-            .extend_from_slice(&pixel_width.to_le_bytes());
-        self.placements
-            .extend_from_slice(&pixel_height.to_le_bytes());
-        self.placements.extend_from_slice(&source_x.to_le_bytes());
-        self.placements.extend_from_slice(&source_y.to_le_bytes());
-        self.placements
-            .extend_from_slice(&source_width.to_le_bytes());
-        self.placements
-            .extend_from_slice(&source_height.to_le_bytes());
+        let p = &mut self.placements;
+        p.extend_from_slice(&image_id.to_le_bytes());
+        p.extend_from_slice(&placement_id.to_le_bytes());
+        p.extend_from_slice(&z.to_le_bytes());
+        p.extend_from_slice(&viewport_col.to_le_bytes());
+        p.extend_from_slice(&viewport_row.to_le_bytes());
+        p.extend_from_slice(&pixel_width.to_le_bytes());
+        p.extend_from_slice(&pixel_height.to_le_bytes());
+        p.extend_from_slice(&source_x.to_le_bytes());
+        p.extend_from_slice(&source_y.to_le_bytes());
+        p.extend_from_slice(&source_width.to_le_bytes());
+        p.extend_from_slice(&source_height.to_le_bytes());
         self.placement_count += 1;
     }
 
-    pub fn finish(mut self) -> Vec<u8> {
-        self.out[self.row_count_pos..self.row_count_pos + 4]
-            .copy_from_slice(&self.rows_written.to_le_bytes());
-        self.out
-            .extend_from_slice(&self.grapheme_count.to_le_bytes());
-        self.out.extend_from_slice(&self.graphemes);
-        self.out.extend_from_slice(&self.image_count.to_le_bytes());
-        self.out.extend_from_slice(&self.images);
-        self.out
-            .extend_from_slice(&self.placement_count.to_le_bytes());
-        self.out.extend_from_slice(&self.placements);
-        self.out
+    pub fn finish(self) -> Vec<u8> {
+        let mut out = self.header;
+        out.extend_from_slice(&self.scrollback_promotions.to_le_bytes());
+        out.extend_from_slice(&self.active_rows.to_le_bytes());
+        out.extend_from_slice(&self.active);
+        out.extend_from_slice(&self.grapheme_count.to_le_bytes());
+        out.extend_from_slice(&self.graphemes);
+        out.extend_from_slice(&self.image_count.to_le_bytes());
+        out.extend_from_slice(&self.images);
+        out.extend_from_slice(&self.placement_count.to_le_bytes());
+        out.extend_from_slice(&self.placements);
+        out
     }
 }
 
@@ -257,7 +251,6 @@ pub fn exit_event() -> Vec<u8> {
     vec![KIND_EXIT]
 }
 
-/// Translate a libghostty cell style block into our packed [`CellFlags`].
 pub fn cell_flags(style: &libghostty_vt::style::Style) -> CellFlags {
     let mut f = CellFlags::empty();
     if style.bold {

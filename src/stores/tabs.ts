@@ -1,13 +1,14 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-import { commands, events } from "@/gen/bindings";
+import { ptyClose, ptySpawn } from "@/ipc/commands";
+import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
 import { clearMouseTracking, setMouseTracking } from "@/lib/xtermInput";
 
-/** Raw bytes from a frame channel, or `null` for the exit kind. The first
- *  byte is the discriminator (see `wire::KIND_*`). */
-export type PtyEvent = ArrayBuffer | null;
+/** Raw bytes from the pty frame channel. The first byte is the
+ *  discriminator (see `wire::KIND_*`). */
+export type PtyEvent = ArrayBuffer;
 
 export type Tab = {
     id: number;
@@ -48,14 +49,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     spawn: async (cwd) => {
         const channel = new Channel<ArrayBuffer>();
         const { cols, rows } = get().dims;
-        // pty_spawn isn't part of the tauri-specta surface (its channel arg
-        // carries raw binary frames), so we hand-roll the invoke call here.
-        const { rid, shell } = await invoke<{ rid: number; shell: string }>("pty_spawn", {
-            events: channel,
-            cols,
-            rows,
-            cwd,
-        });
+        const { rid, shell } = await ptySpawn(channel, cols, rows, cwd);
         channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
         tabChannels.set(rid, channel);
         set((s) => ({
@@ -71,7 +65,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     },
 
     close: (rid) => {
-        void commands.ptyClose(rid);
+        void ptyClose(rid);
     },
 
     reorder: (oldIndex, newIndex) =>
@@ -149,15 +143,12 @@ function pickNextActive(
 }
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
+    const store = useTabsStore.getState();
     const unlistens = await Promise.all([
-        events.ptyTitle.listen((e) =>
-            useTabsStore.getState().handleTitle(e.payload.rid, e.payload.title),
-        ),
-        events.ptyCwd.listen((e) =>
-            useTabsStore.getState().handleCwd(e.payload.rid, e.payload.cwd),
-        ),
-        events.ptyExit.listen((e) => useTabsStore.getState().handleExit(e.payload.rid)),
-        events.ptyModes.listen((e) => setMouseTracking(e.payload.rid, e.payload.mouseTracking)),
+        onPtyTitle(({ rid, title }) => store.handleTitle(rid, title)),
+        onPtyCwd(({ rid, cwd }) => store.handleCwd(rid, cwd)),
+        onPtyExit(({ rid }) => store.handleExit(rid)),
+        onPtyModes(({ rid, mouseTracking }) => setMouseTracking(rid, mouseTracking)),
     ]);
     return () => unlistens.forEach((u) => u());
 }

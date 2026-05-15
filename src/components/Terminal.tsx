@@ -1,5 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -8,8 +9,7 @@ import { Terminal as XtermTerminal } from "@xterm/xterm";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
-import TerminalScrollbar from "@/components/TerminalScrollbar";
-import { commands } from "@/gen/bindings";
+import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
 import { i18next } from "@/lib/i18n";
 import {
     applyFrame,
@@ -17,9 +17,8 @@ import {
     KIND_EXIT,
     KIND_FRAME,
     type GraphicsOverlay,
-    type ScrollInfo,
 } from "@/lib/xtermGhostty";
-import { handleKey, handleMouse, handleWheel } from "@/lib/xtermInput";
+import { handleKey, handleMouse } from "@/lib/xtermInput";
 import { getCellPx } from "@/lib/xtermInternals";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
@@ -31,6 +30,7 @@ type Props = {
 };
 
 const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
+const SCROLLBACK_ROWS = 5000;
 
 function fontStack(family: string): string {
     return [family, ...FALLBACK_FONTS]
@@ -42,8 +42,9 @@ function fontStack(family: string): string {
 function Terminal({ rid, active, onResize }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XtermTerminal | null>(null);
-    const [scrollInfo, setScrollInfo] = useState<ScrollInfo | null>(null);
-    const [viewportRows, setViewportRows] = useState(24);
+    const searchRef = useRef<SearchAddon | null>(null);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const xtermTheme = useThemeStore((s) => s.theme?.xterm);
 
@@ -64,7 +65,7 @@ function Terminal({ rid, active, onResize }: Props) {
         let unsubChannel: (() => void) | undefined;
 
         (async () => {
-            const config = await commands.getConfig();
+            const config = await getConfig();
             if (ac.signal.aborted) return;
 
             const term = new XtermTerminal({
@@ -73,11 +74,9 @@ function Terminal({ rid, active, onResize }: Props) {
                 theme: buildTheme(),
                 cursorBlink: true,
                 quirks: { allowSetCursorBlink: true },
+                scrollbar: { width: 8 },
                 allowProposedApi: true,
-                // Ghostty owns the scrollback; xterm.js just renders the
-                // current viewport. Our own <TerminalScrollbar /> overlay
-                // takes the place of xterm's native scrollbar.
-                scrollback: 0,
+                scrollback: SCROLLBACK_ROWS,
             });
             termRef.current = term;
             cleanups.push(() => {
@@ -87,7 +86,11 @@ function Terminal({ rid, active, onResize }: Props) {
 
             term.attachCustomKeyEventHandler((event) => {
                 if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    void commands.ptyWrite(rid, "\x0c");
+                    void ptyWrite(rid, "\x0c");
+                    return false;
+                }
+                if (event.type === "keydown" && event.metaKey && event.key === "f") {
+                    setSearchOpen(true);
                     return false;
                 }
                 return handleKey(rid, event);
@@ -95,9 +98,12 @@ function Terminal({ rid, active, onResize }: Props) {
 
             const fit = new FitAddon();
             const webFonts = new WebFontsAddon();
+            const search = new SearchAddon();
+            searchRef.current = search;
             for (const addon of [
                 fit,
                 webFonts,
+                search,
                 new UnicodeGraphemesAddon(),
                 new WebLinksAddon((event, uri) => {
                     event.preventDefault();
@@ -106,6 +112,9 @@ function Terminal({ rid, active, onResize }: Props) {
             ]) {
                 term.loadAddon(addon);
             }
+            cleanups.push(() => {
+                searchRef.current = null;
+            });
             term.unicode.activeVersion = "15-graphemes";
 
             const ro = new ResizeObserver(() => {
@@ -129,43 +138,29 @@ function Terminal({ rid, active, onResize }: Props) {
             fit.fit();
             ro.observe(container);
 
-            let overlay: GraphicsOverlay | null = attachGraphicsOverlay(term);
+            const overlay: GraphicsOverlay | null = attachGraphicsOverlay(term);
             if (overlay) {
                 const canvas = overlay.canvas;
                 cleanups.push(() => canvas.remove());
             }
 
-            const wheelHandler = (e: WheelEvent) => {
-                // Capture-phase + stopPropagation so xterm.js's wheel listener
-                // (which converts wheel → arrow keys in alt-buffer mode) never
-                // fires. Ghostty owns the viewport — trackpad must scroll the
-                // scrollback, not type arrows into the running program.
-                e.preventDefault();
-                e.stopPropagation();
-                handleWheel(rid, e);
-            };
             const mouseHandler = (e: MouseEvent) => {
                 handleMouse(rid, container, term.cols, term.rows, e);
             };
-            container.addEventListener("wheel", wheelHandler, {
-                passive: false,
-                capture: true,
-            });
             container.addEventListener("mousedown", mouseHandler);
             container.addEventListener("mouseup", mouseHandler);
             container.addEventListener("mousemove", mouseHandler);
             cleanups.push(() => {
-                container.removeEventListener("wheel", wheelHandler, { capture: true });
                 container.removeEventListener("mousedown", mouseHandler);
                 container.removeEventListener("mouseup", mouseHandler);
                 container.removeEventListener("mousemove", mouseHandler);
             });
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
-                if (ac.signal.aborted || !event) return;
+                if (ac.signal.aborted) return;
                 const kind = new DataView(event).getUint8(0);
                 if (kind === KIND_FRAME) {
-                    applyFrame(term, event, overlay, setScrollInfo);
+                    applyFrame(term, event, overlay);
                 } else if (kind === KIND_EXIT) {
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
                 }
@@ -175,17 +170,15 @@ function Terminal({ rid, active, onResize }: Props) {
                 const { width, height } = getCellPx(term);
                 return { cellWidth: width, cellHeight: height };
             };
-            term.onData((data) => void commands.ptyWrite(rid, data));
+            term.onData((data) => void ptyWrite(rid, data));
             term.onResize(({ cols, rows }) => {
                 const cell = cellSize();
-                void commands.ptyResize(rid, cols, rows, cell.cellWidth, cell.cellHeight);
-                setViewportRows(rows);
+                void ptyResize(rid, cols, rows, cell.cellWidth, cell.cellHeight);
                 handleResize(cols, rows);
             });
-            setViewportRows(term.rows);
 
             const cell = cellSize();
-            void commands.ptyResize(rid, term.cols, term.rows, cell.cellWidth, cell.cellHeight);
+            void ptyResize(rid, term.cols, term.rows, cell.cellWidth, cell.cellHeight);
 
             focusIfActive(term);
         })();
@@ -216,7 +209,28 @@ function Terminal({ rid, active, onResize }: Props) {
             }}
         >
             <div ref={containerRef} className="absolute inset-0 overflow-hidden" />
-            <TerminalScrollbar rid={rid} viewportRows={viewportRows} info={scrollInfo} />
+            {searchOpen && (
+                <div className="absolute top-2 right-3 z-10 flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm shadow-lg glass">
+                    <input
+                        autoFocus
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                                setSearchOpen(false);
+                                setSearchQuery("");
+                                searchRef.current?.clearDecorations();
+                                termRef.current?.focus();
+                            } else if (e.key === "Enter") {
+                                if (e.shiftKey) searchRef.current?.findPrevious(searchQuery);
+                                else searchRef.current?.findNext(searchQuery);
+                            }
+                        }}
+                        placeholder="Search scrollback…"
+                        className="w-56 bg-transparent text-foreground outline-none placeholder:text-foreground/40"
+                    />
+                </div>
+            )}
         </div>
     );
 }

@@ -7,7 +7,14 @@
  */
 import type { Terminal } from "@xterm/xterm";
 
-import { getBuffer, getCellPx, packAttrs, refresh, type Rgb } from "@/lib/xtermInternals";
+import {
+    getBuffer,
+    getCellPx,
+    packAttrs,
+    promoteToScrollback,
+    refresh,
+    type Rgb,
+} from "@/lib/xtermInternals";
 
 export const KIND_FRAME = 0x01;
 export const KIND_EXIT = 0x02;
@@ -33,21 +40,11 @@ export type GraphicsOverlay = {
     imageCache: Map<number, ImageBitmap>;
 };
 
-/** Scroll position reported per frame, fed to the UI scrollbar. */
-export type ScrollInfo = {
-    /** Total rows currently in ghostty's scrollback. */
-    scrollbackRows: number;
-    /** Rows the viewport is scrolled up from the active screen
-     *  (0 = at the bottom, scrollbackRows = at the top). */
-    viewportOffset: number;
-};
-
 /** Walk one binary frame and apply it directly to `term`. */
 export function applyFrame(
     term: Terminal,
     bytes: ArrayBuffer,
     overlay: GraphicsOverlay | null,
-    onScroll?: (info: ScrollInfo) => void,
 ): void {
     const view = new DataView(bytes);
     const decoder = new BinaryDecoder(view);
@@ -57,9 +54,6 @@ export function applyFrame(
     decoder.u16(); // cols, unused on render side
     decoder.u16(); // rows, unused on render side
     decoder.skip(6); // bg+fg RGB; xterm theme already has these
-    const scrollbackRows = decoder.u32();
-    const viewportOffset = decoder.u32();
-    onScroll?.({ scrollbackRows, viewportOffset });
     const cursor =
         (frameFlags & FRAME_CURSOR) !== 0
             ? {
@@ -70,6 +64,9 @@ export function applyFrame(
               }
             : null;
     const fullRedraw = (frameFlags & FRAME_FULL) !== 0;
+
+    const scrollbackPromotions = decoder.u32();
+    if (scrollbackPromotions > 0) promoteToScrollback(term, scrollbackPromotions);
 
     const buffer = getBuffer(term);
     if (!buffer) return;
