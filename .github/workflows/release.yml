@@ -17,15 +17,11 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
+            - name: Setup toolchain
+              uses: jdx/mise-action@v2
               with:
-                  bun-version: latest
-
-            - name: Setup Rust
-              uses: dtolnay/rust-toolchain@stable
-              with:
-                  targets: aarch64-apple-darwin
+                  install: true
+                  cache: true
 
             - name: Cache Cargo registry & target
               uses: Swatinem/rust-cache@v2
