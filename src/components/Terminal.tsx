@@ -10,7 +10,6 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
-import { onPtyBell } from "@/ipc/events";
 import { i18next } from "@/lib/i18n";
 import {
     applyFrame,
@@ -197,22 +196,6 @@ function Terminal({ rid, active, onResize }: Props) {
                 container.removeEventListener("mouseup", mouseHandler);
                 container.removeEventListener("mousemove", mouseHandler);
                 unsubTracking();
-            });
-
-            // Visual bell: ghostty fires on \x07. Flash the container
-            // briefly. CSS animation in App.css picks up the data attr.
-            const bellTimeoutRef: { id?: ReturnType<typeof setTimeout> } = {};
-            const unsubBell = await onPtyBell(({ rid: bellRid }) => {
-                if (bellRid !== rid || !term.element) return;
-                term.element.dataset.bell = "1";
-                if (bellTimeoutRef.id) clearTimeout(bellTimeoutRef.id);
-                bellTimeoutRef.id = setTimeout(() => {
-                    if (term.element) delete term.element.dataset.bell;
-                }, 180);
-            });
-            cleanups.push(() => {
-                if (bellTimeoutRef.id) clearTimeout(bellTimeoutRef.id);
-                unsubBell();
             });
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
