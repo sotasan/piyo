@@ -1,12 +1,14 @@
 #!/bin/sh
 self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
+PIYO_TTY=$(tty 2>/dev/null) || PIYO_TTY=/dev/tty
+export PIYO_TTY
 exec claude --settings '{
     "hooks": {
         "Stop": [{
             "hooks": [{
                 "type": "command",
-                "command": "{ printf \"\\033]7496;claude;stop;\"; cat; printf \"\\007\"; } > /dev/tty 2>/dev/null"
+                "command": "{ printf \"\\033]7496;claude;stop;\"; cat; printf \"\\007\"; } > \"$PIYO_TTY\" 2>/dev/null"
             }]
         }]
     }
