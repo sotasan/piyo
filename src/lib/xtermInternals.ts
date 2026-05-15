@@ -78,6 +78,8 @@ type Buffer = {
 type Core = {
     buffer?: Buffer;
     refresh?: (start: number, end: number) => void;
+    _bufferService?: { scroll: (eraseAttr: unknown, isWrapped?: boolean) => void };
+    _inputHandler?: { _eraseAttrData: () => unknown };
     _renderService?: {
         dimensions?: { css?: { cell?: { width: number; height: number } } };
     };
@@ -94,6 +96,21 @@ export function getBuffer(term: Terminal): Buffer | undefined {
 
 export function refresh(term: Terminal, start: number, end: number): void {
     core(term).refresh?.(start, end);
+}
+
+/** Promote one row of the active region into xterm's scrollback. Mirrors
+ *  what xterm's own InputHandler does on `\n` when the cursor is at the
+ *  bottom of the scroll region. Used here to advance the buffer when
+ *  ghostty has just evicted N rows from its active screen. */
+export function promoteToScrollback(term: Terminal, count: number): void {
+    if (count <= 0) return;
+    const c = core(term);
+    const scroll = c._bufferService?.scroll;
+    const eraseAttr = c._inputHandler?._eraseAttrData();
+    if (!scroll || eraseAttr === undefined) return;
+    for (let i = 0; i < count; i++) {
+        scroll.call(c._bufferService, eraseAttr);
+    }
 }
 
 export function getCellPx(term: Terminal): { width: number; height: number } {

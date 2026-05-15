@@ -2,11 +2,10 @@ use anyhow::{Context, Result};
 use config::{Config, File, FileFormat};
 use etcetera::{AppStrategy, app_strategy::AppStrategyArgs, choose_app_strategy};
 use serde::{Deserialize, Serialize};
-use specta::Type;
 
 const DEFAULT_TOML: &str = include_str!("../config/default.toml");
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configuration {
     pub font_family: String,
     pub font_size: u16,
@@ -14,13 +13,12 @@ pub struct Configuration {
     pub terminal: TerminalConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalConfig {
     pub padding: String,
 }
 
 #[tauri::command]
-#[specta::specta]
 pub fn get_config(config: tauri::State<'_, Configuration>) -> Configuration {
     config.inner().clone()
 }

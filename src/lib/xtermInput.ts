@@ -1,9 +1,8 @@
 /**
- * Bridge browser keyboard / mouse events into the typed commands generated
- * by tauri-specta. Mode-dependent VT encoding happens in Rust against the
- * ghostty key/mouse encoders.
+ * Bridge browser keyboard / mouse events into the typed IPC commands.
+ * Mode-dependent VT encoding happens in Rust against ghostty's encoders.
  */
-import { commands } from "@/gen/bindings";
+import { ptySendKey, ptySendMouse, ptyWrite } from "@/ipc/commands";
 
 // Mirrors `libghostty_vt::key::Mods` bit values (shift/ctrl/alt/super =
 // 1/2/4/8). The Rust side ANDs against the supported bits, so anything we
@@ -82,14 +81,14 @@ function macosShortcut(rid: number, e: KeyboardEvent): boolean {
     if (e.metaKey && !e.ctrlKey && !e.altKey) {
         const seq = CMD_KEYS[e.key];
         if (seq !== undefined) {
-            void commands.ptyWrite(rid, seq);
+            void ptyWrite(rid, seq);
             return true;
         }
     }
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
         const seq = OPT_KEYS[e.key];
         if (seq !== undefined) {
-            void commands.ptyWrite(rid, seq);
+            void ptyWrite(rid, seq);
             return true;
         }
     }
@@ -116,7 +115,7 @@ export function handleKey(rid: number, e: KeyboardEvent): boolean {
     const isPress = e.type === "keydown";
     const isRelease = e.type === "keyup";
     if (!isPress && !isRelease) return true;
-    void commands.ptySendKey(rid, {
+    void ptySendKey(rid, {
         code: e.code,
         mods: packMods(e),
         text: isPress && e.key.length === 1 && !e.ctrlKey && !e.metaKey ? e.key : null,
@@ -124,31 +123,6 @@ export function handleKey(rid: number, e: KeyboardEvent): boolean {
         action: isRelease ? ACTION_RELEASE : ACTION_PRESS,
     });
     return false;
-}
-
-/** Pixels of trackpad scroll per scrollback row. Tuned by feel — smaller
- *  is faster. Cell height is ~18-20px, but trackpad inertia inflates totals
- *  so we want each row to cost a bit more than a literal cell. */
-const PIXELS_PER_ROW = 32;
-let scrollAccum = 0;
-
-/** Forward wheel scrolling to ghostty's viewport. Pixel-mode events
- *  (trackpad, smooth wheel) come in tiny per-tick deltas at high frequency,
- *  so we accumulate and only emit once a row's worth has built up. */
-export function handleWheel(rid: number, e: WheelEvent): void {
-    if (e.deltaY === 0) return;
-    let rows: number;
-    if (e.deltaMode === 0) {
-        // DOM_DELTA_PIXEL: trackpad / smooth wheel
-        scrollAccum += e.deltaY;
-        rows = Math.trunc(scrollAccum / PIXELS_PER_ROW);
-        if (rows === 0) return;
-        scrollAccum -= rows * PIXELS_PER_ROW;
-    } else {
-        // DOM_DELTA_LINE / DOM_DELTA_PAGE: legacy wheel, deltaY already in lines.
-        rows = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY)));
-    }
-    void commands.ptyScroll(rid, rows);
 }
 
 export type MouseAnchor = HTMLElement;
@@ -185,7 +159,7 @@ export function handleMouse(
             : e.type === "mouseup"
               ? ACTION_RELEASE
               : MOUSE_ACTION_MOTION;
-    void commands.ptySendMouse(rid, {
+    void ptySendMouse(rid, {
         action,
         button: mouseButton(e),
         mods: packMods(e),

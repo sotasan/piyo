@@ -7,7 +7,6 @@ mod macos;
 mod osc;
 mod pty;
 mod shell;
-pub mod specta_builder;
 mod theme;
 mod vt;
 mod wire;
@@ -24,17 +23,6 @@ pub fn run() {
         )
         .init();
 
-    // bindings.ts is written by `examples/gen_bindings.rs`, invoked from
-    // tauri.conf.json's `beforeDevCommand` / `beforeBuildCommand`.
-    let builder = specta_builder::builder();
-
-    // `pty_spawn` takes a binary `Channel<InvokeResponseBody>` (frame stream)
-    // that has no `specta::Type`. We register it via the regular Tauri handler
-    // alongside the specta-generated one, dispatching by command name.
-    let specta_handler = builder.invoke_handler();
-    let spawn_handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
-        Box::new(tauri::generate_handler![pty::pty_spawn]);
-
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("icon", icon::handle)
         .plugin(tauri_plugin_dialog::init())
@@ -43,15 +31,19 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(move |invoke| {
-            if invoke.message.command() == "pty_spawn" {
-                spawn_handler(invoke)
-            } else {
-                specta_handler(invoke)
-            }
-        })
+        .invoke_handler(tauri::generate_handler![
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_close,
+            pty::pty_send_key,
+            pty::pty_send_mouse,
+            config::get_config,
+            theme::read_user_theme,
+            accent::get_accent_color,
+            appearance::set_window_appearance,
+        ])
         .setup(move |app| {
-            builder.mount_events(app);
             app.manage(config::load());
 
             #[cfg(target_os = "macos")]

@@ -3,7 +3,7 @@ import { Command } from "cmdk";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { commands } from "@/gen/bindings";
+import { getConfig } from "@/ipc/commands";
 import { applyTheme } from "@/lib/theme";
 import { applyAccent } from "@/stores/accent";
 
@@ -48,7 +48,7 @@ export default function CommandPalette() {
                 {mode === "commands" && (
                     <Command.Item
                         onSelect={async () => {
-                            const cfg = await commands.getConfig();
+                            const cfg = await getConfig();
                             await Promise.all([applyTheme(cfg.theme), applyAccent()]);
                             close();
                         }}

@@ -25,7 +25,7 @@ use libghostty_vt::{
     terminal::Mode,
 };
 
-use crate::wire::{self, FrameBuf};
+use crate::wire::{self, Cell, FrameBuf};
 
 /// Shared handle to the PTY master writer. The ghostty `on_pty_write`
 /// callback (DA / DSR responses) and the `pty_write` Tauri command for user
@@ -92,10 +92,9 @@ pub struct Session {
     shipped_images: HashSet<u32>,
     modes: SharedModes,
     mode_listener: Box<dyn ModeListener>,
-    /// Rows the viewport is scrolled up from the active screen bottom.
-    /// libghostty owns the actual position; we mirror it so the frontend
-    /// scrollbar UI doesn't have to query it separately.
-    viewport_offset_up: u32,
+    /// Last seen scrollback-row count; diff against `terminal.scrollback_rows()`
+    /// each frame to find which rows just fell off the active screen.
+    last_scrollback_rows: usize,
 }
 
 impl Session {
@@ -145,7 +144,7 @@ impl Session {
             shipped_images: HashSet::new(),
             modes,
             mode_listener: Box::new(mode_listener),
-            viewport_offset_up: 0,
+            last_scrollback_rows: 0,
         };
         me.refresh_modes();
         Ok(me)
@@ -170,30 +169,6 @@ impl Session {
             .resize(cols, rows, cell_width_px, cell_height_px)
             .context("ghostty terminal resize failed")?;
         Ok(())
-    }
-
-    pub fn scroll_viewport(&mut self, delta: isize) -> Result<Option<Vec<u8>>> {
-        use libghostty_vt::terminal::ScrollViewport;
-        self.terminal.scroll_viewport(ScrollViewport::Delta(delta));
-        // libghostty convention: negative delta scrolls up (into scrollback),
-        // positive scrolls toward the active screen. Mirror that on our
-        // bottom-relative counter and clamp to [0, scrollback_rows].
-        let max = self.terminal.scrollback_rows().unwrap_or(0) as u32;
-        let new = (self.viewport_offset_up as isize - delta).clamp(0, max as isize) as u32;
-        self.viewport_offset_up = new;
-        self.snapshot()
-    }
-
-    pub fn scroll_to_offset(&mut self, offset_up: u32) -> Result<Option<Vec<u8>>> {
-        use libghostty_vt::terminal::ScrollViewport;
-        let max = self.terminal.scrollback_rows().unwrap_or(0) as u32;
-        let target = offset_up.min(max);
-        let delta = self.viewport_offset_up as isize - target as isize;
-        if delta != 0 {
-            self.terminal.scroll_viewport(ScrollViewport::Delta(delta));
-            self.viewport_offset_up = target;
-        }
-        self.snapshot()
     }
 
     fn refresh_modes(&self) {
@@ -241,37 +216,41 @@ impl Session {
     }
 
     fn snapshot(&mut self) -> Result<Option<Vec<u8>>> {
+        // Read the header values + scrollback delta in a scoped block so the
+        // borrow on render_state ends before we re-borrow self for the
+        // scrollback walk.
+        let (cols, rows, full, cursor, bg, fg, dirty_active) = {
+            let snap = self
+                .render_state
+                .update(&self.terminal)
+                .context("render state update failed")?;
+            let dirty_state = snap.dirty().context("reading dirty state failed")?;
+            (
+                snap.cols().context("reading cols failed")?,
+                snap.rows().context("reading rows failed")?,
+                matches!(dirty_state, Dirty::Full),
+                read_cursor(&snap)?,
+                snap.colors().context("reading colors failed")?.background,
+                snap.colors().context("reading colors failed")?.foreground,
+                !matches!(dirty_state, Dirty::Clean),
+            )
+        };
+        let scrollback_rows = self.terminal.scrollback_rows().unwrap_or(0);
+        let delta = scrollback_rows.saturating_sub(self.last_scrollback_rows);
+        if !dirty_active && delta == 0 {
+            return Ok(None);
+        }
+
+        let mut buf = FrameBuf::new(cols, rows, full, cursor, bg, fg);
+        if delta > 0 {
+            buf.set_scrollback_promotions(u32::try_from(delta).unwrap_or(u32::MAX));
+            self.last_scrollback_rows = scrollback_rows;
+        }
+
         let snap = self
             .render_state
             .update(&self.terminal)
-            .context("render state update failed")?;
-        let dirty_state = snap.dirty().context("reading dirty state failed")?;
-        if matches!(dirty_state, Dirty::Clean) {
-            return Ok(None);
-        }
-        let full = matches!(dirty_state, Dirty::Full);
-        let cols = snap.cols().context("reading cols failed")?;
-        let rows = snap.rows().context("reading rows failed")?;
-        let colors = snap.colors().context("reading colors failed")?;
-        let cursor = read_cursor(&snap)?;
-        let scrollback_rows = self.terminal.scrollback_rows().unwrap_or(0) as u32;
-        // Clamp: scrollback can shrink (e.g. resize). If we were scrolled deeper
-        // than the new size, libghostty pins us to the new top.
-        if self.viewport_offset_up > scrollback_rows {
-            self.viewport_offset_up = scrollback_rows;
-        }
-
-        let mut buf = FrameBuf::new(
-            cols,
-            rows,
-            full,
-            cursor,
-            colors.background,
-            colors.foreground,
-            scrollback_rows,
-            self.viewport_offset_up,
-        );
-
+            .context("render state re-update failed")?;
         let mut rows_iter = self
             .row_iter
             .update(&snap)
@@ -284,25 +263,28 @@ impl Session {
         while let Some(row) = rows_iter.next() {
             let row_dirty = row.dirty().context("reading row dirty failed")?;
             if row_dirty || full {
-                buf.start_row(y, cols);
+                buf.start_active_row(y, cols);
                 let mut cell_it = self
                     .cell_iter
                     .update(row)
                     .context("updating cell iterator failed")?;
                 let mut x: u16 = 0;
                 while let Some(cell) = cell_it.next() {
-                    let len = cell.graphemes_len().context("graphemes_len failed")?;
-                    let (codepoint, extras): (u32, Vec<char>) = if len == 0 {
-                        (0, Vec::new())
-                    } else {
-                        let chars = cell.graphemes().context("graphemes failed")?;
-                        let first = chars.first().copied().unwrap_or(' ');
-                        (first as u32, chars.into_iter().skip(1).collect())
-                    };
+                    let (codepoint, extras) = read_graphemes(cell)?;
                     let style = cell.style().context("style failed")?;
                     let fg = cell.fg_color().context("fg_color failed")?;
                     let bg = cell.bg_color().context("bg_color failed")?;
-                    buf.push_cell(y, x, codepoint, wire::cell_flags(&style), fg, bg, &extras);
+                    buf.push_active_cell(
+                        y,
+                        x,
+                        &Cell {
+                            codepoint,
+                            flags: wire::cell_flags(&style),
+                            fg,
+                            bg,
+                        },
+                        &extras,
+                    );
                     x += 1;
                 }
             }
@@ -413,6 +395,16 @@ impl DecodePng for PngDecoder {
             data: buf,
         })
     }
+}
+
+fn read_graphemes(cell: &libghostty_vt::render::CellIteration<'_, '_>) -> Result<(u32, Vec<char>)> {
+    let len = cell.graphemes_len().context("graphemes_len failed")?;
+    if len == 0 {
+        return Ok((0, Vec::new()));
+    }
+    let chars = cell.graphemes().context("graphemes failed")?;
+    let first = chars.first().copied().unwrap_or(' ');
+    Ok((first as u32, chars.into_iter().skip(1).collect()))
 }
 
 fn read_cursor(snap: &Snapshot<'_, '_>) -> Result<Option<(u16, u16, u8, bool)>> {
