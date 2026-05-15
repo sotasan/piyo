@@ -114,11 +114,15 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                     return false;
                 }
                 const letXtermHandle = handleKey(rid, event);
-                // When we intercept (handleKey returned false), xterm's input
-                // path doesn't run and won't auto-scroll. Snap back to the
-                // bottom on any keydown that produced input so the user sees
-                // what they're typing.
-                if (!letXtermHandle && event.type === "keydown") term.scrollToBottom();
+                if (!letXtermHandle) {
+                    // We routed this key through ghostty's encoder. xterm's
+                    // attachCustomKeyEventHandler returning false stops xterm
+                    // but doesn't suppress the browser default — so Tab would
+                    // still move focus off the terminal, Escape would close
+                    // the WebView's text-search UI, etc. Stop the browser too.
+                    event.preventDefault();
+                    if (event.type === "keydown") term.scrollToBottom();
+                }
                 return letXtermHandle;
             });
 
