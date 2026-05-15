@@ -18,7 +18,8 @@
         "later": "稍后"
     },
     "terminal": {
-        "processExited": "[进程已退出]"
+        "processExited": "[进程已退出]",
+        "searchPlaceholder": "搜索回滚缓冲区…"
     },
     "menu": {
         "file": "文件",

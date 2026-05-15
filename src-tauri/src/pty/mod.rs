@@ -149,6 +149,11 @@ pub async fn pty_spawn(
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(error = %e, "ghostty vt session init failed");
+                // Run the same teardown the normal exit path uses so the
+                // child is reaped and the frontend learns the PTY died.
+                reap(&child_for_reader);
+                let _ = events.send(InvokeResponseBody::Raw(wire::exit_event()));
+                let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });
                 return;
             }
         };

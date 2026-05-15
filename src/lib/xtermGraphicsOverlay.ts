@@ -79,13 +79,20 @@ export function decodeAndPaintOverlay(
         const byteLen = decoder.u32();
         const pixels = decoder.bytes(byteLen);
         if (overlay.imageCache.has(id)) continue;
-        const data = new ImageData(new Uint8ClampedArray(pixels), width, height);
-        createImageBitmap(data)
-            .then((bm) => {
-                overlay.imageCache.set(id, bm);
-                repaintOverlay(term, overlay);
-            })
-            .catch(() => {});
+        // Validate dimensions before handing to ImageData — it throws
+        // synchronously on mismatch and would break the whole frame.
+        if (width === 0 || height === 0 || pixels.length !== width * height * 4) continue;
+        try {
+            const data = new ImageData(new Uint8ClampedArray(pixels), width, height);
+            createImageBitmap(data)
+                .then((bm) => {
+                    overlay.imageCache.set(id, bm);
+                    repaintOverlay(term, overlay);
+                })
+                .catch(() => {});
+        } catch {
+            // Malformed image — skip and move on.
+        }
     }
 
     const placementCount = decoder.u32();

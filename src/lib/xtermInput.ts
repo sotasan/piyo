@@ -53,7 +53,15 @@ function shouldIntercept(e: KeyboardEvent): boolean {
     // matches one of the readline shortcuts we explicitly handle.
     // Cmd-K and Cmd-F are intercepted upstream in useXterm.ts.
     if (e.metaKey) return CMD_KEYS[e.key] !== undefined;
+    // Numpad keys need ghostty's encoder when the running app is in
+    // application-keypad mode (DECKPAM). e.key alternates between digits
+    // and navigation labels based on NumLock; e.code is stable.
+    if (e.code?.startsWith("Numpad")) return true;
     return e.ctrlKey || e.altKey || SPECIAL_KEYS.has(e.key);
+}
+
+function isMacOS(): boolean {
+    return typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 }
 
 /**
@@ -69,6 +77,7 @@ function shouldIntercept(e: KeyboardEvent): boolean {
  * encoder doesn't see a release event for a press it never saw.
  */
 function macosShortcut(rid: number, e: KeyboardEvent): boolean {
+    if (!isMacOS()) return false;
     const isCmd = e.metaKey && !e.ctrlKey && !e.altKey;
     const isOpt = e.altKey && !e.ctrlKey && !e.metaKey;
     const seq = isCmd ? CMD_KEYS[e.key] : isOpt ? OPT_KEYS[e.key] : undefined;

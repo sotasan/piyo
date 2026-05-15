@@ -52,4 +52,22 @@ describe("ptyModes store", () => {
         setPtyModes(RID, OFF);
         expect(count).toBe(1);
     });
+
+    test("getPtyModes returns a defensive copy", () => {
+        setPtyModes(RID, ON);
+        const fetched = getPtyModes(RID);
+        fetched.mouseTracking = false;
+        fetched.bracketedPaste = false;
+        fetched.focusEvent = false;
+        expect(getPtyModes(RID)).toEqual(ON);
+    });
+
+    test("setPtyModes clones the input", () => {
+        const mutable: PtyTermModes = { ...ON };
+        setPtyModes(RID, mutable);
+        mutable.mouseTracking = false;
+        mutable.bracketedPaste = false;
+        mutable.focusEvent = false;
+        expect(getPtyModes(RID)).toEqual(ON);
+    });
 });

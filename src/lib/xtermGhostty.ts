@@ -9,7 +9,13 @@ import type { Terminal } from "@xterm/xterm";
 
 import { BinaryDecoder } from "@/lib/binaryDecoder";
 import { decodeAndPaintOverlay, type GraphicsOverlay } from "@/lib/xtermGraphicsOverlay";
-import { getBuffer, packAttrs, promoteToScrollback, refresh } from "@/lib/xtermInternals";
+import {
+    getBuffer,
+    packAttrs,
+    type PackedAttrs,
+    promoteToScrollback,
+    refresh,
+} from "@/lib/xtermInternals";
 
 export const KIND_FRAME = 0x01;
 export const KIND_EXIT = 0x02;
@@ -63,7 +69,10 @@ export function applyFrame(
     const rowCount = decoder.u32();
     let minRow = Number.POSITIVE_INFINITY;
     let maxRow = Number.NEGATIVE_INFINITY;
-    const graphemeIndex = new Map<number, string>();
+    // Cells flagged as having a grapheme overlay: keep the attrs we just
+    // packed so the grapheme pass can re-set the base codepoint with the
+    // same styling and only append combining marks via addCodepointToCell.
+    const graphemeAttrs = new Map<number, PackedAttrs>();
     for (let r = 0; r < rowCount; r++) {
         const y = decoder.u16();
         const cellCount = decoder.u16();
@@ -76,9 +85,10 @@ export function applyFrame(
             const bg = (colorFlags & COLOR_BG) !== 0 ? decoder.rgb() : null;
             if (!line) continue;
             const cp = codepoint === 0 ? SPACE : codepoint;
-            line.setCellFromCodepoint(x, cp, 1, packAttrs(styleFlags, fg, bg));
+            const attrs = packAttrs(styleFlags, fg, bg);
+            line.setCellFromCodepoint(x, cp, 1, attrs);
             if ((colorFlags & COLOR_GRAPHEME) !== 0) {
-                graphemeIndex.set((y << 16) | x, "");
+                graphemeAttrs.set((y << 16) | x, attrs);
             }
         }
         if (line) line.isWrapped = false;
@@ -92,20 +102,26 @@ export function applyFrame(
         const x = decoder.u16();
         const len = decoder.u16();
         const text = decoder.utf8(len);
-        // Replace the cell's single-codepoint we wrote above with the full
-        // multi-codepoint grapheme cluster.
         const key = (y << 16) | x;
-        if (graphemeIndex.has(key)) {
-            const line = buffer.lines?.get(buffer.ybase + y);
-            const cp = text.codePointAt(0) ?? SPACE;
-            // setCellFromCodepoint only takes one cp; for graphemes we still
-            // start with the base cp. xterm's grapheme rendering then handles
-            // combining marks via its own buffer state. Good enough for now;
-            // proper grapheme cluster support requires the extended path.
-            line?.setCellFromCodepoint(x, cp, 1, packAttrs(0, null, null));
+        const attrs = graphemeAttrs.get(key);
+        if (!attrs) continue;
+        const line = buffer.lines?.get(buffer.ybase + y);
+        if (!line) continue;
+        // Iterate Unicode codepoints, not UTF-16 code units, so surrogate
+        // pairs (emoji etc.) stay intact. The first codepoint reseats the
+        // cell with the original attrs; the rest append as combining marks
+        // so neither the base codepoint nor the styling gets overwritten.
+        const points = Array.from(text);
+        if (points.length === 0) continue;
+        const base = points[0].codePointAt(0) ?? SPACE;
+        line.setCellFromCodepoint(x, base, 1, attrs);
+        for (let i = 1; i < points.length; i++) {
+            const cp = points[i].codePointAt(0);
+            if (cp !== undefined) line.addCodepointToCell(x, cp, 0);
         }
     }
 
+    const prevCursorY = buffer.y;
     if (cursor) {
         buffer.x = cursor.x;
         buffer.y = cursor.y;
@@ -121,6 +137,15 @@ export function applyFrame(
     }
 
     if (minRow <= maxRow) refresh(term, minRow, maxRow);
+    else if (cursor && !fullRedraw) {
+        // Cursor-only frame: nudge the renderer so the cursor's old and
+        // new rows actually repaint. xterm picks up buffer.x/y on its
+        // next render tick anyway, but an explicit refresh keeps the
+        // cursor responsive when the renderer is idle.
+        const lo = Math.min(prevCursorY, buffer.y);
+        const hi = Math.max(prevCursorY, buffer.y);
+        refresh(term, lo, hi);
+    }
     if (fullRedraw) refresh(term, 0, term.rows - 1);
 
     if (overlay) decodeAndPaintOverlay(decoder, term, overlay);
