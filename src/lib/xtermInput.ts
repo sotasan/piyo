@@ -2,8 +2,12 @@
  * Bridge browser keyboard events into the typed IPC key command.
  * Mode-dependent VT encoding happens in Rust against ghostty's encoders.
  */
+import { platform } from "@tauri-apps/plugin-os";
+
 import { ptySendKey, ptyWrite } from "@/ipc/commands";
 import { ACTION_PRESS, ACTION_RELEASE, packMods } from "@/lib/inputModifiers";
+
+const IS_MACOS = platform() === "macos";
 
 const SPECIAL_KEYS = new Set<string>([
     "ArrowUp",
@@ -60,10 +64,6 @@ function shouldIntercept(e: KeyboardEvent): boolean {
     return e.ctrlKey || e.altKey || SPECIAL_KEYS.has(e.key);
 }
 
-function isMacOS(): boolean {
-    return typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-}
-
 /**
  * macOS keyboard conventions that don't map to standard VT sequences.
  * Shells (readline-style) expect raw control bytes here, not CSI codes:
@@ -77,7 +77,7 @@ function isMacOS(): boolean {
  * encoder doesn't see a release event for a press it never saw.
  */
 function macosShortcut(rid: number, e: KeyboardEvent): boolean {
-    if (!isMacOS()) return false;
+    if (!IS_MACOS) return false;
     const isCmd = e.metaKey && !e.ctrlKey && !e.altKey;
     const isOpt = e.altKey && !e.ctrlKey && !e.metaKey;
     const seq = isCmd ? CMD_KEYS[e.key] : isOpt ? OPT_KEYS[e.key] : undefined;
