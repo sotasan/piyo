@@ -94,6 +94,14 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
                 scrollback: SCROLLBACK_ROWS,
+                // Ghostty is the authoritative VT and repaints the visible
+                // grid on every resize. xterm's own reflow would wrap our
+                // already-rendered cells and dump the resulting interim rows
+                // into scrollback before ghostty's repaint arrives. Setting
+                // windowsPty.buildNumber to a non-conpty value flips xterm's
+                // internal _isReflowEnabled to false (Buffer.ts:317) — the
+                // documented escape hatch for hosts that own their own reflow.
+                windowsPty: { buildNumber: 1 },
             });
             termRef.current = term;
             cleanups.push(() => {
