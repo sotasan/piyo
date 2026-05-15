@@ -19,7 +19,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::keycode;
 use crate::osc::OscPerformer;
 use crate::shell::{self, ResourceDirs, Shell};
-use crate::vt::{self, ModeListener, MouseFormat, MouseTracking, Session, TitleListener};
+use crate::vt::{
+    self, BellListener, ModeListener, MouseFormat, MouseTracking, Session, TitleListener,
+};
 use crate::wire;
 
 const READ_BUF_SIZE: usize = 4096;
@@ -28,6 +30,7 @@ pub const EVENT_PTY_TITLE: &str = "pty:title";
 pub const EVENT_PTY_CWD: &str = "pty:cwd";
 pub const EVENT_PTY_EXIT: &str = "pty:exit";
 pub const EVENT_PTY_MODES: &str = "pty:modes";
+pub const EVENT_PTY_BELL: &str = "pty:bell";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +61,14 @@ pub type CommandResult<T> = Result<T, CommandError>;
 pub struct PtyModes {
     pub rid: u32,
     pub mouse_tracking: bool,
+    pub bracketed_paste: bool,
+    pub focus_event: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyBell {
+    pub rid: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -386,6 +397,10 @@ pub async fn pty_spawn(
             app: app_for_session.clone(),
             rid,
         };
+        let bell_listener = BellEmit {
+            app: app_for_session.clone(),
+            rid,
+        };
         let mut session = match Session::new(
             cols,
             rows,
@@ -393,6 +408,7 @@ pub async fn pty_spawn(
             modes_for_vt,
             mode_listener,
             title_listener,
+            bell_listener,
         ) {
             Ok(s) => s,
             Err(e) => {
@@ -509,6 +525,8 @@ impl ModeListener for ModeEmit {
             PtyModes {
                 rid: self.rid,
                 mouse_tracking: !matches!(modes.mouse_tracking, MouseTracking::None),
+                bracketed_paste: modes.bracketed_paste,
+                focus_event: modes.focus_event,
             },
         );
     }
@@ -527,5 +545,15 @@ impl TitleListener for TitleEmit {
                 title: title.to_string(),
             },
         );
+    }
+}
+
+struct BellEmit {
+    app: AppHandle,
+    rid: u32,
+}
+impl BellListener for BellEmit {
+    fn on_bell(&self) {
+        let _ = self.app.emit(EVENT_PTY_BELL, PtyBell { rid: self.rid });
     }
 }

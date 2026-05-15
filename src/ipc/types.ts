@@ -75,4 +75,11 @@ export type PtyExit = {
 export type PtyModes = {
     rid: number;
     mouseTracking: boolean;
+    bracketedPaste: boolean;
+    focusEvent: boolean;
+};
+
+/** mirrors `crate::pty::PtyBell` */
+export type PtyBell = {
+    rid: number;
 };
