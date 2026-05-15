@@ -43,6 +43,12 @@ pub struct Modes {
     pub kitty_flags: u8,
     pub mouse_tracking: MouseTracking,
     pub mouse_format: MouseFormat,
+    /// DEC mode 2004 — when on, paste operations should wrap input in
+    /// `\x1b[200~ … \x1b[201~` so the shell treats it as one block.
+    pub bracketed_paste: bool,
+    /// DEC mode 1004 — when on, the terminal should emit `\x1b[I` / `\x1b[O`
+    /// on focus gain / loss so the running app can react.
+    pub focus_event: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -82,6 +88,11 @@ pub trait TitleListener: Send + 'static {
     fn on_title(&self, title: &str);
 }
 
+/// Notified each time the terminal receives a BEL (`\x07`).
+pub trait BellListener: Send + 'static {
+    fn on_bell(&self);
+}
+
 /// A live ghostty parsing session bound to a single PTY.
 pub struct Session {
     terminal: Terminal<'static, 'static>,
@@ -105,6 +116,7 @@ impl Session {
         modes: SharedModes,
         mode_listener: impl ModeListener,
         title_listener: impl TitleListener,
+        bell_listener: impl BellListener,
     ) -> Result<Self> {
         // libghostty-vt's PNG decoder slot is thread-local; install ours.
         let _ = set_png_decoder(Some(Box::new(PngDecoder)));
@@ -133,7 +145,9 @@ impl Session {
                 let title = term.title().unwrap_or_default();
                 title_listener.on_title(title);
             })
-            .context("registering on_title_changed failed")?;
+            .context("registering on_title_changed failed")?
+            .on_bell(move |_term| bell_listener.on_bell())
+            .context("registering on_bell failed")?;
 
         let me = Self {
             terminal,
@@ -203,6 +217,8 @@ impl Session {
             } else {
                 MouseFormat::X10
             },
+            bracketed_paste: term.mode(Mode::BRACKETED_PASTE).unwrap_or(false),
+            focus_event: term.mode(Mode::FOCUS_EVENT).unwrap_or(false),
         };
         let changed = {
             let mut prev = self.modes.lock().unwrap();

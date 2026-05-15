@@ -176,34 +176,57 @@ export function handleWheel(
     return true;
 }
 
-/** Tracks per-PTY mouse-tracking-on state so we can short-circuit motion
- *  events when the running app isn't listening for them, and so the UI
- *  can swap the mouse pointer between I-beam and arrow. */
-const trackingByRid = new Map<number, boolean>();
-const trackingListeners = new Map<number, (tracking: boolean) => void>();
+/** Per-PTY mode state mirrored from ghostty. Drives wheel encoding,
+ *  pointer shape, paste wrapping, and focus event emission. */
+export type PtyTermModes = {
+    mouseTracking: boolean;
+    bracketedPaste: boolean;
+    focusEvent: boolean;
+};
 
-export function setMouseTracking(rid: number, tracking: boolean): void {
-    if (trackingByRid.get(rid) === tracking) return;
-    trackingByRid.set(rid, tracking);
-    trackingListeners.get(rid)?.(tracking);
+const modesByRid = new Map<number, PtyTermModes>();
+const modeListeners = new Map<number, (m: PtyTermModes) => void>();
+
+const DEFAULT_MODES: PtyTermModes = {
+    mouseTracking: false,
+    bracketedPaste: false,
+    focusEvent: false,
+};
+
+export function setPtyModes(rid: number, modes: PtyTermModes): void {
+    const prev = modesByRid.get(rid);
+    if (
+        prev &&
+        prev.mouseTracking === modes.mouseTracking &&
+        prev.bracketedPaste === modes.bracketedPaste &&
+        prev.focusEvent === modes.focusEvent
+    ) {
+        return;
+    }
+    modesByRid.set(rid, modes);
+    modeListeners.get(rid)?.(modes);
 }
 
-export function clearMouseTracking(rid: number): void {
-    trackingByRid.delete(rid);
-    trackingListeners.delete(rid);
+export function getPtyModes(rid: number): PtyTermModes {
+    return modesByRid.get(rid) ?? DEFAULT_MODES;
 }
 
-/** Subscribe to mouse-tracking state changes for one rid. The callback
- *  fires only on transitions. */
-export function onMouseTrackingChange(rid: number, cb: (tracking: boolean) => void): () => void {
-    trackingListeners.set(rid, cb);
+export function clearPtyModes(rid: number): void {
+    modesByRid.delete(rid);
+    modeListeners.delete(rid);
+}
+
+/** Subscribe to mode changes for one rid. Callback fires only on actual
+ *  state transitions. */
+export function onPtyModesChange(rid: number, cb: (m: PtyTermModes) => void): () => void {
+    modeListeners.set(rid, cb);
     return () => {
-        if (trackingListeners.get(rid) === cb) trackingListeners.delete(rid);
+        if (modeListeners.get(rid) === cb) modeListeners.delete(rid);
     };
 }
 
 function isTracking(rid: number): boolean {
-    return trackingByRid.get(rid) === true;
+    return getPtyModes(rid).mouseTracking;
 }
 
 export function handleMouse(

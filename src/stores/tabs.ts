@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
-import { clearMouseTracking, setMouseTracking } from "@/lib/xtermInput";
+import { clearPtyModes, setPtyModes } from "@/lib/xtermInput";
 
 /** Raw bytes from the pty frame channel. The first byte is the
  *  discriminator (see `wire::KIND_*`). */
@@ -123,7 +123,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             tabChannels.delete(rid);
             tabHandlers.delete(rid);
-            clearMouseTracking(rid);
+            clearPtyModes(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
@@ -148,7 +148,9 @@ export async function subscribeTabs(): Promise<UnlistenFn> {
         onPtyTitle(({ rid, title }) => store.handleTitle(rid, title)),
         onPtyCwd(({ rid, cwd }) => store.handleCwd(rid, cwd)),
         onPtyExit(({ rid }) => store.handleExit(rid)),
-        onPtyModes(({ rid, mouseTracking }) => setMouseTracking(rid, mouseTracking)),
+        onPtyModes(({ rid, mouseTracking, bracketedPaste, focusEvent }) =>
+            setPtyModes(rid, { mouseTracking, bracketedPaste, focusEvent }),
+        ),
     ]);
     return () => unlistens.forEach((u) => u());
 }
