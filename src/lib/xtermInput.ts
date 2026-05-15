@@ -1,20 +1,9 @@
 /**
- * Bridge browser keyboard / mouse events into the typed IPC commands.
+ * Bridge browser keyboard events into the typed IPC key command.
  * Mode-dependent VT encoding happens in Rust against ghostty's encoders.
  */
-import { ptySendKey, ptySendMouse, ptyWrite } from "@/ipc/commands";
-
-// Mirrors `libghostty_vt::key::Mods` bit values (shift/ctrl/alt/super =
-// 1/2/4/8). The Rust side ANDs against the supported bits, so anything we
-// pack here is fine.
-const MOD_SHIFT = 1 << 0;
-const MOD_CTRL = 1 << 1;
-const MOD_ALT = 1 << 2;
-const MOD_SUPER = 1 << 3;
-
-const ACTION_PRESS = 0;
-const ACTION_RELEASE = 1;
-const MOUSE_ACTION_MOTION = 2;
+import { ptySendKey, ptyWrite } from "@/ipc/commands";
+import { ACTION_PRESS, ACTION_RELEASE, packMods } from "@/lib/inputModifiers";
 
 const SPECIAL_KEYS = new Set<string>([
     "ArrowUp",
@@ -48,20 +37,6 @@ const SPECIAL_KEYS = new Set<string>([
     "F19",
     "F20",
 ]);
-
-function packMods(e: {
-    shiftKey: boolean;
-    ctrlKey: boolean;
-    altKey: boolean;
-    metaKey: boolean;
-}): number {
-    return (
-        (e.shiftKey ? MOD_SHIFT : 0) |
-        (e.ctrlKey ? MOD_CTRL : 0) |
-        (e.altKey ? MOD_ALT : 0) |
-        (e.metaKey ? MOD_SUPER : 0)
-    );
-}
 
 function shouldIntercept(e: KeyboardEvent): boolean {
     if (e.isComposing || e.keyCode === 229) return false;
@@ -117,159 +92,4 @@ export function handleKey(rid: number, e: KeyboardEvent): boolean {
         action: isRelease ? ACTION_RELEASE : ACTION_PRESS,
     });
     return false;
-}
-
-export type MouseAnchor = HTMLElement;
-
-/** Pixels of trackpad scroll per emitted wheel click. Trackpads on macOS
- *  fire many tiny per-frame deltas; without accumulation a single swipe
- *  emits dozens of wheel events. Tuned to feel like ghostty's default. */
-const PIXELS_PER_WHEEL_CLICK = 80;
-let wheelAccum = 0;
-
-/** Encode wheel scrolling as mouse-button events for apps that have mouse
- *  tracking enabled (lazygit, htop, btop, vim with mouse=a, etc). Returns
- *  true when we encoded; false to let xterm scroll its own scrollback. */
-export function handleWheel(
-    rid: number,
-    anchor: MouseAnchor,
-    cols: number,
-    rows: number,
-    e: WheelEvent,
-): boolean {
-    if (!isTracking(rid) || e.deltaY === 0) return false;
-
-    // Pixel-mode (trackpad / smooth wheel): accumulate and emit one click
-    // per threshold. Line/page-mode (legacy mouse wheel): pass through.
-    let clicks: number;
-    if (e.deltaMode === 0) {
-        wheelAccum += e.deltaY;
-        clicks = Math.trunc(wheelAccum / PIXELS_PER_WHEEL_CLICK);
-        if (clicks === 0) return true;
-        wheelAccum -= clicks * PIXELS_PER_WHEEL_CLICK;
-    } else {
-        clicks = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY)));
-    }
-
-    const rect = anchor.getBoundingClientRect();
-    const button = clicks < 0 ? 3 : 4; // Four = up, Five = down
-    const size = {
-        screenWidth: Math.max(1, Math.round(rect.width)),
-        screenHeight: Math.max(1, Math.round(rect.height)),
-        cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
-        cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
-    };
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const mods = packMods(e);
-    for (let i = 0; i < Math.abs(clicks); i++) {
-        void ptySendMouse(rid, {
-            action: ACTION_PRESS,
-            button,
-            mods,
-            x,
-            y,
-            size,
-            anyPressed: false,
-        });
-    }
-    return true;
-}
-
-/** Per-PTY mode state mirrored from ghostty. Drives wheel encoding,
- *  pointer shape, paste wrapping, and focus event emission. */
-export type PtyTermModes = {
-    mouseTracking: boolean;
-    bracketedPaste: boolean;
-    focusEvent: boolean;
-};
-
-const modesByRid = new Map<number, PtyTermModes>();
-const modeListeners = new Map<number, (m: PtyTermModes) => void>();
-
-const DEFAULT_MODES: PtyTermModes = {
-    mouseTracking: false,
-    bracketedPaste: false,
-    focusEvent: false,
-};
-
-export function setPtyModes(rid: number, modes: PtyTermModes): void {
-    const prev = modesByRid.get(rid);
-    if (
-        prev &&
-        prev.mouseTracking === modes.mouseTracking &&
-        prev.bracketedPaste === modes.bracketedPaste &&
-        prev.focusEvent === modes.focusEvent
-    ) {
-        return;
-    }
-    modesByRid.set(rid, modes);
-    modeListeners.get(rid)?.(modes);
-}
-
-export function getPtyModes(rid: number): PtyTermModes {
-    return modesByRid.get(rid) ?? DEFAULT_MODES;
-}
-
-export function clearPtyModes(rid: number): void {
-    modesByRid.delete(rid);
-    modeListeners.delete(rid);
-}
-
-/** Subscribe to mode changes for one rid. Callback fires only on actual
- *  state transitions. */
-export function onPtyModesChange(rid: number, cb: (m: PtyTermModes) => void): () => void {
-    modeListeners.set(rid, cb);
-    return () => {
-        if (modeListeners.get(rid) === cb) modeListeners.delete(rid);
-    };
-}
-
-function isTracking(rid: number): boolean {
-    return getPtyModes(rid).mouseTracking;
-}
-
-export function handleMouse(
-    rid: number,
-    anchor: MouseAnchor,
-    cols: number,
-    rows: number,
-    e: MouseEvent,
-): void {
-    // Motion events are only meaningful when the terminal is in a tracking mode.
-    if (e.type === "mousemove" && !isTracking(rid)) return;
-    const rect = anchor.getBoundingClientRect();
-    const action =
-        e.type === "mousedown"
-            ? ACTION_PRESS
-            : e.type === "mouseup"
-              ? ACTION_RELEASE
-              : MOUSE_ACTION_MOTION;
-    void ptySendMouse(rid, {
-        action,
-        button: mouseButton(e),
-        mods: packMods(e),
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-        size: {
-            screenWidth: Math.max(1, Math.round(rect.width)),
-            screenHeight: Math.max(1, Math.round(rect.height)),
-            cellWidth: Math.max(1, Math.round(rect.width / Math.max(1, cols))),
-            cellHeight: Math.max(1, Math.round(rect.height / Math.max(1, rows))),
-        },
-        anyPressed: (e.buttons ?? 0) !== 0,
-    });
-}
-
-function mouseButton(e: MouseEvent): number | null {
-    switch (e.button) {
-        case 0:
-            return 0;
-        case 1:
-            return 1;
-        case 2:
-            return 2;
-        default:
-            return null;
-    }
 }

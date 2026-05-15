@@ -5,16 +5,11 @@
  * Wire format: see `src-tauri/src/wire.rs`. Single-byte discriminator:
  *   0x01 = frame, 0x02 = exit.
  */
-import type { IMarker, Terminal } from "@xterm/xterm";
+import type { Terminal } from "@xterm/xterm";
 
-import {
-    getBuffer,
-    getCellPx,
-    packAttrs,
-    promoteToScrollback,
-    refresh,
-    type Rgb,
-} from "@/lib/xtermInternals";
+import { BinaryDecoder } from "@/lib/binaryDecoder";
+import { decodeAndPaintOverlay, type GraphicsOverlay } from "@/lib/xtermGraphicsOverlay";
+import { getBuffer, packAttrs, promoteToScrollback, refresh } from "@/lib/xtermInternals";
 
 export const KIND_FRAME = 0x01;
 export const KIND_EXIT = 0x02;
@@ -35,45 +30,13 @@ const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {
     3: "bar",
 };
 
-type TrackedPlacement = {
-    imageId: number;
-    /** Marker tied to the xterm row where this placement was first seen.
-     *  Follows the row through scrollback growth; disposed when xterm
-     *  trims that row off the end of its circular buffer, at which point
-     *  we drop the placement. */
-    marker: IMarker;
-    /** Column anchor in ghostty's viewport. */
-    col: number;
-    pixelWidth: number;
-    pixelHeight: number;
-    sourceX: number;
-    sourceY: number;
-    sourceWidth: number;
-    sourceHeight: number;
-    z: number;
-};
-
-export type GraphicsOverlay = {
-    canvas: HTMLCanvasElement;
-    imageCache: Map<number, ImageBitmap>;
-    /** Active placements keyed by `imageId:placementId`. Survives ghostty
-     *  no longer reporting them (e.g. after the placement scrolled off
-     *  the active region into history) so the image stays anchored to
-     *  its xterm row. */
-    placements: Map<string, TrackedPlacement>;
-    /** Last DECTCEM state we propagated to xterm. Lets us write the
-     *  show/hide escape only on transitions. */
-    cursorVisible: boolean;
-};
-
 /** Walk one binary frame and apply it directly to `term`. */
 export function applyFrame(
     term: Terminal,
     bytes: ArrayBuffer,
     overlay: GraphicsOverlay | null,
 ): void {
-    const view = new DataView(bytes);
-    const decoder = new BinaryDecoder(view);
+    const decoder = new BinaryDecoder(new DataView(bytes));
     const kind = decoder.u8();
     if (kind !== KIND_FRAME) return;
     const frameFlags = decoder.u8();
@@ -161,182 +124,4 @@ export function applyFrame(
     if (fullRedraw) refresh(term, 0, term.rows - 1);
 
     if (overlay) decodeAndPaintOverlay(decoder, term, overlay);
-}
-
-function decodeAndPaintOverlay(
-    decoder: BinaryDecoder,
-    term: Terminal,
-    overlay: GraphicsOverlay,
-): void {
-    const imageCount = decoder.u32();
-    for (let i = 0; i < imageCount; i++) {
-        const id = decoder.u32();
-        const width = decoder.u32();
-        const height = decoder.u32();
-        const byteLen = decoder.u32();
-        const pixels = decoder.bytes(byteLen);
-        if (overlay.imageCache.has(id)) continue;
-        const data = new ImageData(new Uint8ClampedArray(pixels), width, height);
-        createImageBitmap(data)
-            .then((bm) => {
-                overlay.imageCache.set(id, bm);
-                repaintOverlay(term, overlay);
-            })
-            .catch(() => {});
-    }
-
-    const placementCount = decoder.u32();
-    const cursorY = term.buffer.active.cursorY;
-    for (let i = 0; i < placementCount; i++) {
-        const imageId = decoder.u32();
-        const placementId = decoder.u32();
-        const z = decoder.i32();
-        const viewportCol = decoder.i32();
-        const viewportRow = decoder.i32();
-        const pixelWidth = decoder.u32();
-        const pixelHeight = decoder.u32();
-        const sourceX = decoder.u32();
-        const sourceY = decoder.u32();
-        const sourceWidth = decoder.u32();
-        const sourceHeight = decoder.u32();
-        const key = `${imageId}:${placementId}`;
-        if (overlay.placements.has(key)) continue;
-        const marker = term.registerMarker(viewportRow - cursorY);
-        if (!marker) continue;
-        marker.onDispose(() => overlay.placements.delete(key));
-        overlay.placements.set(key, {
-            imageId,
-            marker,
-            col: viewportCol,
-            pixelWidth,
-            pixelHeight,
-            sourceX,
-            sourceY,
-            sourceWidth,
-            sourceHeight,
-            z,
-        });
-    }
-    repaintOverlay(term, overlay);
-}
-
-/** Repaint cached placements. Called both from the per-frame path and from
- *  xterm's scroll events so images shift with the user's scroll position. */
-export function repaintOverlay(term: Terminal, overlay: GraphicsOverlay): void {
-    const { canvas, placements } = overlay;
-    const parent = canvas.parentElement;
-    if (!parent) return;
-    const cssWidth = parent.clientWidth;
-    const cssHeight = parent.clientHeight;
-    if (cssWidth === 0 || cssHeight === 0) return;
-    canvas.style.width = `${cssWidth}px`;
-    canvas.style.height = `${cssHeight}px`;
-    const dpr = window.devicePixelRatio || 1;
-    const targetW = Math.round(cssWidth * dpr);
-    const targetH = Math.round(cssHeight * dpr);
-    if (canvas.width !== targetW) canvas.width = targetW;
-    if (canvas.height !== targetH) canvas.height = targetH;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
-
-    if (placements.size === 0) return;
-    const { width: cellWidth, height: cellHeight } = getCellPx(term);
-    if (!cellWidth || !cellHeight) return;
-
-    const viewportY = term.buffer.active.viewportY;
-    const sorted = Array.from(placements.values()).sort((a, b) => a.z - b.z);
-    for (const p of sorted) {
-        const bm = overlay.imageCache.get(p.imageId);
-        if (!bm) continue;
-        // marker.line is the placement's absolute row in xterm's buffer;
-        // subtract viewportY to get its visible y. Off-screen placements
-        // are still drawn — the canvas clips them.
-        const y = (p.marker.line - viewportY) * cellHeight;
-        ctx.drawImage(
-            bm,
-            p.sourceX,
-            p.sourceY,
-            p.sourceWidth,
-            p.sourceHeight,
-            p.col * cellWidth,
-            y,
-            p.pixelWidth,
-            p.pixelHeight,
-        );
-    }
-}
-
-/** Attach a kitty-graphics overlay canvas above xterm.js's text. The
- *  returned overlay must be repainted whenever the user scrolls xterm so
- *  images stay anchored to ghostty's active-region rows. */
-export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
-    if (!term.element) return null;
-    const canvas = document.createElement("canvas");
-    canvas.style.position = "absolute";
-    canvas.style.left = "0";
-    canvas.style.top = "0";
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    canvas.style.pointerEvents = "none";
-    canvas.style.zIndex = "5";
-    canvas.width = 0;
-    canvas.height = 0;
-    term.element.appendChild(canvas);
-    return {
-        canvas,
-        imageCache: new Map(),
-        placements: new Map(),
-        cursorVisible: true,
-    };
-}
-
-class BinaryDecoder {
-    private offset = 0;
-    private readonly view: DataView;
-
-    constructor(view: DataView) {
-        this.view = view;
-    }
-
-    u8(): number {
-        const v = this.view.getUint8(this.offset);
-        this.offset += 1;
-        return v;
-    }
-    u16(): number {
-        const v = this.view.getUint16(this.offset, true);
-        this.offset += 2;
-        return v;
-    }
-    u32(): number {
-        const v = this.view.getUint32(this.offset, true);
-        this.offset += 4;
-        return v;
-    }
-    i32(): number {
-        const v = this.view.getInt32(this.offset, true);
-        this.offset += 4;
-        return v;
-    }
-    rgb(): Rgb {
-        const r = this.u8();
-        const g = this.u8();
-        const b = this.u8();
-        return [r, g, b];
-    }
-    bytes(len: number): Uint8Array {
-        const v = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, len);
-        this.offset += len;
-        return v;
-    }
-    utf8(len: number): string {
-        const bytes = this.bytes(len);
-        return new TextDecoder().decode(bytes);
-    }
-    skip(len: number): void {
-        this.offset += len;
-    }
 }

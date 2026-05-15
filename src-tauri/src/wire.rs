@@ -292,3 +292,238 @@ pub fn cell_flags(style: &libghostty_vt::style::Style) -> CellFlags {
     }
     f
 }
+
+#[cfg(test)]
+mod tests {
+    //! Round-trip tests for the binary frame format defined above. We
+    //! hand-decode the produced bytes and compare against the values we
+    //! encoded, catching layout drifts in either direction.
+
+    use libghostty_vt::style::RgbColor;
+
+    use super::{Cell, CellFlags, CursorInfo, FrameBuf, KIND_EXIT, KIND_FRAME, exit_event};
+
+    fn rgb(r: u8, g: u8, b: u8) -> RgbColor {
+        RgbColor { r, g, b }
+    }
+
+    #[test]
+    fn exit_event_is_a_single_discriminator_byte() {
+        assert_eq!(exit_event(), vec![KIND_EXIT]);
+    }
+
+    #[test]
+    fn minimal_frame_serialises_header_then_empty_sections() {
+        let bytes = FrameBuf::new(80, 24, false, None, rgb(1, 2, 3), rgb(4, 5, 6)).finish();
+
+        let mut cursor = Cursor::new(&bytes);
+        assert_eq!(cursor.u8(), KIND_FRAME);
+        assert_eq!(cursor.u8(), 0, "no full/cursor flags set");
+        assert_eq!(cursor.u16(), 80);
+        assert_eq!(cursor.u16(), 24);
+        assert_eq!(cursor.next_n(3), [1, 2, 3]);
+        assert_eq!(cursor.next_n(3), [4, 5, 6]);
+        assert_eq!(cursor.u32(), 0, "scrollback promotions");
+        assert_eq!(cursor.u32(), 0, "active row count");
+        assert_eq!(cursor.u32(), 0, "grapheme count");
+        assert_eq!(cursor.u32(), 0, "image count");
+        assert_eq!(cursor.u32(), 0, "placement count");
+        assert!(cursor.eof());
+    }
+
+    #[test]
+    fn full_redraw_flag_is_packed_into_the_frame_byte() {
+        let bytes = FrameBuf::new(1, 1, true, None, rgb(0, 0, 0), rgb(0, 0, 0)).finish();
+        assert_eq!(bytes[0], KIND_FRAME);
+        assert_eq!(bytes[1] & 0b01, 0b01, "FULL flag bit is set");
+        assert_eq!(bytes[1] & 0b10, 0, "CURSOR flag bit is not set");
+    }
+
+    #[test]
+    fn cursor_payload_is_emitted_when_present() {
+        let cursor = CursorInfo {
+            x: 13,
+            y: 7,
+            style: 2,
+            blink: true,
+            visible: false,
+        };
+        let bytes = FrameBuf::new(80, 24, false, Some(cursor), rgb(0, 0, 0), rgb(0, 0, 0)).finish();
+        let mut c = Cursor::new(&bytes);
+        assert_eq!(c.u8(), KIND_FRAME);
+        assert_eq!(c.u8() & 0b10, 0b10, "CURSOR flag bit");
+        c.u16(); // cols
+        c.u16(); // rows
+        c.next_n(6); // bg+fg
+        assert_eq!(c.u16(), 13);
+        assert_eq!(c.u16(), 7);
+        assert_eq!(c.u8(), 2);
+        assert_eq!(c.u8(), 1, "blink");
+        assert_eq!(c.u8(), 0, "visible=false");
+    }
+
+    #[test]
+    fn active_row_with_one_styled_cell_encodes_correctly() {
+        let mut buf = FrameBuf::new(2, 1, false, None, rgb(0, 0, 0), rgb(0, 0, 0));
+        buf.start_active_row(0, 1);
+        buf.push_active_cell(
+            0,
+            0,
+            &Cell {
+                codepoint: u32::from('A'),
+                flags: CellFlags::BOLD | CellFlags::UNDERLINE,
+                fg: Some(rgb(255, 0, 0)),
+                bg: None,
+            },
+            &[],
+        );
+        let bytes = buf.finish();
+
+        let mut c = Cursor::new(&bytes);
+        c.u8(); // kind
+        c.u8(); // flags
+        c.u16(); // cols
+        c.u16(); // rows
+        c.next_n(6); // bg+fg
+        c.u32(); // scrollback promotions
+
+        assert_eq!(c.u32(), 1, "one active row");
+        assert_eq!(c.u16(), 0, "row y");
+        assert_eq!(c.u16(), 1, "row cell count");
+        assert_eq!(c.u32(), u32::from('A'));
+        let style_flags = c.u8();
+        assert_eq!(style_flags, (CellFlags::BOLD | CellFlags::UNDERLINE).bits());
+        let color_flags = c.u8();
+        assert_eq!(color_flags & 0b001, 0b001, "FG present");
+        assert_eq!(color_flags & 0b010, 0, "BG absent");
+        assert_eq!(color_flags & 0b100, 0, "no grapheme overlay");
+        assert_eq!(c.next_n(3), [255, 0, 0]);
+
+        assert_eq!(c.u32(), 0, "grapheme count");
+        assert_eq!(c.u32(), 0, "image count");
+        assert_eq!(c.u32(), 0, "placement count");
+        assert!(c.eof());
+    }
+
+    #[test]
+    fn extras_on_a_cell_emit_a_grapheme_overlay_entry() {
+        let mut buf = FrameBuf::new(2, 1, false, None, rgb(0, 0, 0), rgb(0, 0, 0));
+        buf.start_active_row(0, 1);
+        // base 'e' + combining acute accent — two codepoints, one grapheme.
+        buf.push_active_cell(
+            0,
+            0,
+            &Cell {
+                codepoint: u32::from('e'),
+                flags: CellFlags::empty(),
+                fg: None,
+                bg: None,
+            },
+            &['\u{0301}'],
+        );
+        let bytes = buf.finish();
+
+        let mut c = Cursor::new(&bytes);
+        c.u8(); // kind
+        c.u8(); // flags
+        c.u16();
+        c.u16();
+        c.next_n(6);
+        c.u32(); // scrollback
+
+        assert_eq!(c.u32(), 1, "one active row");
+        c.u16(); // row y
+        c.u16(); // row cell count
+        c.u32(); // codepoint
+        c.u8(); // style flags
+        let color_flags = c.u8();
+        assert_eq!(color_flags & 0b100, 0b100, "GRAPHEME flag set");
+
+        assert_eq!(c.u32(), 1, "one grapheme entry");
+        assert_eq!(c.u16(), 0, "grapheme y");
+        assert_eq!(c.u16(), 0, "grapheme x");
+        let len = c.u16() as usize;
+        let utf8 = c.next_n(len);
+        let s = std::str::from_utf8(&utf8).unwrap();
+        assert_eq!(s, "e\u{0301}");
+    }
+
+    #[test]
+    fn scrollback_promotions_are_serialised_before_active_rows() {
+        let mut buf = FrameBuf::new(80, 24, false, None, rgb(0, 0, 0), rgb(0, 0, 0));
+        buf.set_scrollback_promotions(7);
+        let bytes = buf.finish();
+        let mut c = Cursor::new(&bytes);
+        c.u8(); // kind
+        c.u8(); // flags
+        c.u16(); // cols
+        c.u16(); // rows
+        c.next_n(6); // bg+fg
+        assert_eq!(c.u32(), 7);
+        assert_eq!(c.u32(), 0, "no active rows");
+    }
+
+    #[test]
+    fn image_section_is_serialised_with_length_prefix() {
+        let mut buf = FrameBuf::new(80, 24, false, None, rgb(0, 0, 0), rgb(0, 0, 0));
+        buf.push_image(42, 2, 1, &[10, 20, 30, 255, 40, 50, 60, 255]);
+        let bytes = buf.finish();
+        let mut c = Cursor::new(&bytes);
+        c.u8(); // kind
+        c.u8(); // flags
+        c.u16(); // cols
+        c.u16(); // rows
+        c.next_n(6); // bg+fg
+        c.u32(); // scrollback
+        c.u32(); // active rows
+        c.u32(); // grapheme count
+
+        assert_eq!(c.u32(), 1, "image count");
+        assert_eq!(c.u32(), 42, "image id");
+        assert_eq!(c.u32(), 2, "width");
+        assert_eq!(c.u32(), 1, "height");
+        assert_eq!(c.u32(), 8, "byte length");
+        assert_eq!(c.next_n(8), [10, 20, 30, 255, 40, 50, 60, 255]);
+    }
+
+    // ── tiny hand-rolled cursor so the test mirrors how the TS decoder reads ──
+
+    struct Cursor<'a> {
+        bytes: &'a [u8],
+        pos: usize,
+    }
+
+    impl<'a> Cursor<'a> {
+        fn new(bytes: &'a [u8]) -> Self {
+            Self { bytes, pos: 0 }
+        }
+
+        fn u8(&mut self) -> u8 {
+            let v = self.bytes[self.pos];
+            self.pos += 1;
+            v
+        }
+
+        fn u16(&mut self) -> u16 {
+            let v = u16::from_le_bytes(self.bytes[self.pos..self.pos + 2].try_into().unwrap());
+            self.pos += 2;
+            v
+        }
+
+        fn u32(&mut self) -> u32 {
+            let v = u32::from_le_bytes(self.bytes[self.pos..self.pos + 4].try_into().unwrap());
+            self.pos += 4;
+            v
+        }
+
+        fn next_n(&mut self, n: usize) -> Vec<u8> {
+            let v = self.bytes[self.pos..self.pos + n].to_vec();
+            self.pos += n;
+            v
+        }
+
+        fn eof(&self) -> bool {
+            self.pos == self.bytes.len()
+        }
+    }
+}

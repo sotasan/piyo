@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
-import { clearPtyModes, setPtyModes } from "@/lib/xtermInput";
+import { clearPtyModes, setPtyModes } from "@/lib/ptyModes";
 
 /** Raw bytes from the pty frame channel. The first byte is the
  *  discriminator (see `wire::KIND_*`). */
