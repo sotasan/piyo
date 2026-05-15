@@ -12,7 +12,7 @@
 //!   [u8 bg_r][u8 bg_g][u8 bg_b]
 //!   [u8 fg_r][u8 fg_g][u8 fg_b]
 //!   if cursor present:
-//!     [u16 x][u16 y][u8 style][u8 blink]
+//!     [u16 x][u16 y][u8 style][u8 blink][u8 visible]
 //!   [u32 scrollback_promotions]   rows just evicted from active. Renderer
 //!                                  calls xterm.scroll() this many times
 //!                                  before writing the new active region;
@@ -82,6 +82,18 @@ pub struct Cell {
     pub bg: Option<RgbColor>,
 }
 
+#[derive(Clone, Copy)]
+pub struct CursorInfo {
+    pub x: u16,
+    pub y: u16,
+    /// 0=block, 1=block_hollow, 2=underline, 3=bar.
+    pub style: u8,
+    pub blink: bool,
+    /// Mirrors ghostty's DECTCEM state (mode 25). When `false`, the
+    /// renderer hides the cursor via `\x1b[?25l`.
+    pub visible: bool,
+}
+
 /// Builder for one binary frame. Sections are buffered and concatenated by
 /// [`finish`], so callers can push them in any order.
 pub struct FrameBuf {
@@ -102,7 +114,7 @@ impl FrameBuf {
         cols: u16,
         rows: u16,
         full: bool,
-        cursor: Option<(u16, u16, u8, bool)>,
+        cursor: Option<CursorInfo>,
         bg: RgbColor,
         fg: RgbColor,
     ) -> Self {
@@ -119,11 +131,12 @@ impl FrameBuf {
         header.extend_from_slice(&cols.to_le_bytes());
         header.extend_from_slice(&rows.to_le_bytes());
         header.extend_from_slice(&[bg.r, bg.g, bg.b, fg.r, fg.g, fg.b]);
-        if let Some((x, y, style, blink)) = cursor {
-            header.extend_from_slice(&x.to_le_bytes());
-            header.extend_from_slice(&y.to_le_bytes());
-            header.push(style);
-            header.push(u8::from(blink));
+        if let Some(c) = cursor {
+            header.extend_from_slice(&c.x.to_le_bytes());
+            header.extend_from_slice(&c.y.to_le_bytes());
+            header.push(c.style);
+            header.push(u8::from(c.blink));
+            header.push(u8::from(c.visible));
         }
         Self {
             header,

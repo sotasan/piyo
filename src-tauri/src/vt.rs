@@ -25,7 +25,7 @@ use libghostty_vt::{
     terminal::Mode,
 };
 
-use crate::wire::{self, Cell, FrameBuf};
+use crate::wire::{self, Cell, CursorInfo, FrameBuf};
 
 /// Shared handle to the PTY master writer. The ghostty `on_pty_write`
 /// callback (DA / DSR responses) and the `pty_write` Tauri command for user
@@ -406,10 +406,11 @@ fn read_graphemes(cell: &libghostty_vt::render::CellIteration<'_, '_>) -> Result
     Ok((first as u32, chars.into_iter().skip(1).collect()))
 }
 
-fn read_cursor(snap: &Snapshot<'_, '_>) -> Result<Option<(u16, u16, u8, bool)>> {
-    if !snap.cursor_visible().context("cursor_visible failed")? {
-        return Ok(None);
-    }
+fn read_cursor(snap: &Snapshot<'_, '_>) -> Result<Option<CursorInfo>> {
+    // Always read position even when invisible — the renderer needs to keep
+    // its cursor position in sync so DECTCEM-show later puts it in the
+    // right place. Only return None when ghostty has no viewport cursor
+    // (e.g. resize transients).
     let Some(vp) = snap.cursor_viewport().context("cursor_viewport failed")? else {
         return Ok(None);
     };
@@ -423,6 +424,11 @@ fn read_cursor(snap: &Snapshot<'_, '_>) -> Result<Option<(u16, u16, u8, bool)>> 
         CursorVisualStyle::Bar => 3,
         _ => 0,
     };
-    let blinking = snap.cursor_blinking().context("cursor_blinking failed")?;
-    Ok(Some((vp.x, vp.y, style, blinking)))
+    Ok(Some(CursorInfo {
+        x: vp.x,
+        y: vp.y,
+        style,
+        blink: snap.cursor_blinking().context("cursor_blinking failed")?,
+        visible: snap.cursor_visible().context("cursor_visible failed")?,
+    }))
 }
