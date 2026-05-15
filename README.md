@@ -16,11 +16,13 @@
 
 - ⚡ GPU-accelerated rendering
 - 👻 Ghostty-powered terminal engine
-- 🖼️ Kitty graphics protocol
+- 🖼️ Kitty graphics and keyboard protocols
+- 🔤 Full Unicode and emoji support
 - 🍎 Native macOS look and feel
-- 🌐 Multi-language support
+- 🗂️ Tabbed terminal sessions
 - ✨ Claude Code and Codex CLI integration
 - 🐚 Bash, Zsh, Fish and Nushell integration
+- 🌐 Multi-language support
 - 🎨 Shiki-powered themes
 - ⚙️ TOML-based user config
 
