@@ -61,6 +61,9 @@ export type GraphicsOverlay = {
      *  the active region into history) so the image stays anchored to
      *  its xterm row. */
     placements: Map<string, TrackedPlacement>;
+    /** Last DECTCEM state we propagated to xterm. Lets us write the
+     *  show/hide escape only on transitions. */
+    cursorVisible: boolean;
 };
 
 /** Walk one binary frame and apply it directly to `term`. */
@@ -84,6 +87,7 @@ export function applyFrame(
                   y: decoder.u16(),
                   style: decoder.u8(),
                   blink: decoder.u8() !== 0,
+                  visible: decoder.u8() !== 0,
               }
             : null;
     const fullRedraw = (frameFlags & FRAME_FULL) !== 0;
@@ -145,6 +149,12 @@ export function applyFrame(
         const desired = CURSOR_STYLES[cursor.style];
         if (desired && term.options.cursorStyle !== desired) term.options.cursorStyle = desired;
         if (term.options.cursorBlink !== cursor.blink) term.options.cursorBlink = cursor.blink;
+        // Mirror ghostty's DECTCEM into xterm. Writing the escape lets
+        // xterm's parser update its own cursor-visibility state.
+        if (overlay && overlay.cursorVisible !== cursor.visible) {
+            term.write(cursor.visible ? "\x1b[?25h" : "\x1b[?25l");
+            overlay.cursorVisible = cursor.visible;
+        }
     }
 
     if (minRow <= maxRow) refresh(term, minRow, maxRow);
@@ -275,7 +285,12 @@ export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
     canvas.width = 0;
     canvas.height = 0;
     term.element.appendChild(canvas);
-    return { canvas, imageCache: new Map(), placements: new Map() };
+    return {
+        canvas,
+        imageCache: new Map(),
+        placements: new Map(),
+        cursorVisible: true,
+    };
 }
 
 class BinaryDecoder {
