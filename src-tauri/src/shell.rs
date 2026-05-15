@@ -147,3 +147,42 @@ pub fn build_command(
     }
     Ok(cmd)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Shell, sh_quote};
+
+    #[test]
+    fn known_shells_are_detected_by_basename() {
+        assert!(matches!(Shell::detect("/bin/bash"), Shell::Bash));
+        assert!(matches!(Shell::detect("/usr/bin/zsh"), Shell::Zsh));
+        assert!(matches!(
+            Shell::detect("/opt/homebrew/bin/fish"),
+            Shell::Fish
+        ));
+        assert!(matches!(Shell::detect("/usr/local/bin/nu"), Shell::Nu));
+    }
+
+    #[test]
+    fn unknown_shells_fall_through_to_other() {
+        assert!(matches!(Shell::detect("/bin/dash"), Shell::Other));
+        assert!(matches!(Shell::detect("/bin/sh"), Shell::Other));
+    }
+
+    #[test]
+    fn bare_basename_is_handled() {
+        assert!(matches!(Shell::detect("bash"), Shell::Bash));
+    }
+
+    #[test]
+    fn sh_quote_wraps_plain_strings_in_single_quotes() {
+        assert_eq!(sh_quote("hello"), "'hello'");
+        assert_eq!(sh_quote("/usr/bin/zsh"), "'/usr/bin/zsh'");
+    }
+
+    #[test]
+    fn sh_quote_escapes_embedded_single_quotes() {
+        assert_eq!(sh_quote("it's"), r"'it'\''s'");
+        assert_eq!(sh_quote("'"), r"''\'''");
+    }
+}

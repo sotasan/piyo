@@ -129,3 +129,43 @@ pub fn from_web_code(code: &str) -> Key {
         _ => Key::Unidentified,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use libghostty_vt::key::Key;
+
+    use super::from_web_code;
+
+    #[test]
+    fn letters_round_trip_to_uppercase_key_variants() {
+        assert!(matches!(from_web_code("KeyA"), Key::A));
+        assert!(matches!(from_web_code("KeyZ"), Key::Z));
+    }
+
+    #[test]
+    fn digits_map_to_digit_variants() {
+        assert!(matches!(from_web_code("Digit0"), Key::Digit0));
+        assert!(matches!(from_web_code("Digit9"), Key::Digit9));
+    }
+
+    #[test]
+    fn navigation_keys_are_recognised() {
+        assert!(matches!(from_web_code("ArrowUp"), Key::ArrowUp));
+        assert!(matches!(from_web_code("PageDown"), Key::PageDown));
+        assert!(matches!(from_web_code("Home"), Key::Home));
+        assert!(matches!(from_web_code("End"), Key::End));
+    }
+
+    #[test]
+    fn function_keys_f1_through_f20_are_recognised() {
+        assert!(matches!(from_web_code("F1"), Key::F1));
+        assert!(matches!(from_web_code("F12"), Key::F12));
+        assert!(matches!(from_web_code("F20"), Key::F20));
+    }
+
+    #[test]
+    fn unknown_codes_become_unidentified() {
+        assert!(matches!(from_web_code(""), Key::Unidentified));
+        assert!(matches!(from_web_code("NotARealKey"), Key::Unidentified));
+    }
+}

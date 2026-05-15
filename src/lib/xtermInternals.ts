@@ -6,9 +6,12 @@
  * The bit-packing constants below are copied verbatim from
  * `node_modules/@xterm/xterm/src/common/buffer/Constants.ts` at the time of
  * writing. If you bump `@xterm/xterm`, re-read that file and confirm these
- * still match — they are deliberately pinned via `=` in `package.json`.
+ * still match — `@xterm/xterm` is pinned to an exact version in
+ * `package.json` (no caret) for this reason.
  */
 import type { Terminal } from "@xterm/xterm";
+
+import type { Rgb } from "@/lib/binaryDecoder";
 
 // Bits 25..26 of the packed fg/bg word = color mode.
 const CM_RGB = 0x3000000;
@@ -24,8 +27,6 @@ const BG_ITALIC = 0x04000000;
 const BG_DIM = 0x08000000;
 
 const EMPTY_EXTENDED = Object.freeze({});
-
-export type Rgb = readonly [number, number, number];
 
 export type PackedAttrs = {
     fg: number;
@@ -86,8 +87,7 @@ type Core = {
 };
 
 function core(term: Terminal): Core {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (term as unknown as { _core: any })._core;
+    return (term as unknown as { _core: Core })._core;
 }
 
 export function getBuffer(term: Terminal): Buffer | undefined {
