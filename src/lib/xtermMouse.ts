@@ -12,7 +12,9 @@ export type MouseAnchor = HTMLElement;
  *  fire many tiny per-frame deltas; without accumulation a single swipe
  *  emits dozens of wheel events. Tuned to feel like ghostty's default. */
 const PIXELS_PER_WHEEL_CLICK = 80;
-let wheelAccum = 0;
+// Per-PTY accumulator so a partial scroll in one tab can't leak clicks into
+// a different tab when the user switches focus mid-swipe.
+const wheelAccum = new Map<number, number>();
 
 function isTracking(rid: number): boolean {
     return getPtyModes(rid).mouseTracking;
@@ -50,10 +52,13 @@ export function handleWheel(
     // per threshold. Line/page-mode (legacy mouse wheel): pass through.
     let clicks: number;
     if (e.deltaMode === 0) {
-        wheelAccum += e.deltaY;
-        clicks = Math.trunc(wheelAccum / PIXELS_PER_WHEEL_CLICK);
-        if (clicks === 0) return true;
-        wheelAccum -= clicks * PIXELS_PER_WHEEL_CLICK;
+        const next = (wheelAccum.get(rid) ?? 0) + e.deltaY;
+        clicks = Math.trunc(next / PIXELS_PER_WHEEL_CLICK);
+        if (clicks === 0) {
+            wheelAccum.set(rid, next);
+            return true;
+        }
+        wheelAccum.set(rid, next - clicks * PIXELS_PER_WHEEL_CLICK);
     } else {
         clicks = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY)));
     }
