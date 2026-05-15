@@ -75,24 +75,18 @@ function shouldIntercept(e: KeyboardEvent): boolean {
  *   Cmd+Right → ^E  (end of line)          Option+Right → ESC f  (word fwd)
  *   Cmd+Backspace → ^U (kill to start)     Option+Backspace → ^W  (kill word)
  *   Cmd+Delete    → ^K (kill to end)       Option+Delete    → ESC d (kill word fwd)
+ *
+ * Returns true if the key matches a shortcut (caller should suppress xterm).
+ * Sends the readline byte on keydown only; keyup is swallowed so ghostty's
+ * encoder doesn't see a release event for a press it never saw.
  */
 function macosShortcut(rid: number, e: KeyboardEvent): boolean {
-    if (e.type !== "keydown") return false;
-    if (e.metaKey && !e.ctrlKey && !e.altKey) {
-        const seq = CMD_KEYS[e.key];
-        if (seq !== undefined) {
-            void ptyWrite(rid, seq);
-            return true;
-        }
-    }
-    if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        const seq = OPT_KEYS[e.key];
-        if (seq !== undefined) {
-            void ptyWrite(rid, seq);
-            return true;
-        }
-    }
-    return false;
+    const isCmd = e.metaKey && !e.ctrlKey && !e.altKey;
+    const isOpt = e.altKey && !e.ctrlKey && !e.metaKey;
+    const seq = isCmd ? CMD_KEYS[e.key] : isOpt ? OPT_KEYS[e.key] : undefined;
+    if (seq === undefined) return false;
+    if (e.type === "keydown") void ptyWrite(rid, seq);
+    return true;
 }
 
 const CMD_KEYS: Record<string, string> = {
