@@ -1,4 +1,4 @@
 [tools]
 bun = "latest"
 rust = "stable"
-zig = "0.15.2"
+zig = "0.15"

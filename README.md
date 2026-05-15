@@ -28,10 +28,10 @@
 
 The Rust side links against [libghostty-vt](https://github.com/uzaaft/libghostty-rs),
 which builds the ghostty terminal library from source at compile time and
-requires **Zig 0.15.2**. With [`mise`](https://mise.jdx.dev):
+requires **Zig 0.15**. With [`mise`](https://mise.jdx.dev):
 
 ```sh
-mise use -g zig@0.15.2
+mise use -g zig@0.15
 ```
 
 ## Installation
