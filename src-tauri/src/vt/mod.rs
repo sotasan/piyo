@@ -298,6 +298,8 @@ impl Session {
                 info.source_y,
                 info.source_width,
                 info.source_height,
+                p.x_offset().context("placement x_offset failed")?,
+                p.y_offset().context("placement y_offset failed")?,
             );
 
             if !self.shipped_images.contains(&image_id) {
