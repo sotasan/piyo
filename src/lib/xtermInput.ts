@@ -16,6 +16,14 @@ const SPECIAL_KEYS = new Set<string>([
     "PageDown",
     "Insert",
     "Delete",
+    // Modifier+Enter / Tab / Escape need protocol-aware encoding via
+    // ghostty's encoder so apps that enable the Kitty keyboard protocol
+    // (Claude Code, neovim, etc.) can distinguish e.g. Shift+Enter from
+    // plain Enter. Without these here, Shift+Enter falls through to
+    // xterm and gets encoded as a bare \r.
+    "Enter",
+    "Tab",
+    "Escape",
     "F1",
     "F2",
     "F3",
