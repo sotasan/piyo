@@ -24,16 +24,6 @@
 - 🎨 Shiki-powered themes
 - ⚙️ TOML-based user config
 
-## Building from source
-
-The Rust side links against [libghostty-vt](https://github.com/uzaaft/libghostty-rs),
-which builds the ghostty terminal library from source at compile time and
-requires **Zig 0.15**. With [`mise`](https://mise.jdx.dev):
-
-```sh
-mise use -g zig@0.15
-```
-
 ## Installation
 
 ### Homebrew
