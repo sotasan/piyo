@@ -29,6 +29,7 @@ config = { version = "0.15", default-features = false, features = ["toml"] }
 etcetera = "0.11"
 libghostty-vt = { git = "https://github.com/uzaaft/libghostty-rs", branch = "master", features = [
     "kitty-graphics",
+    "link-static",
 ] }
 percent-encoding = "2"
 png = "0.17"
