@@ -4,6 +4,8 @@ use tauri_plugin_notification::NotificationExt;
 use url::Url;
 use vte::Perform;
 
+use crate::pty::{EVENT_PTY_CWD, PtyCwd};
+
 pub struct OscPerformer {
     app: AppHandle,
     rid: ResourceId,
@@ -93,21 +95,18 @@ impl Perform for OscPerformer {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         let Some(&code) = params.first() else { return };
         match code {
-            b"0" | b"2" => {
-                if let Some(title) = join_payload(params, 1) {
-                    let _ = self.app.emit(
-                        "pty:title",
-                        &serde_json::json!({ "rid": self.rid, "title": title }),
-                    );
-                }
-            }
+            // Title (OSC 0 / 2) is tracked by ghostty via Terminal::on_title_changed
+            // in crate::vt, so we don't double-emit it here.
             b"7" => {
                 if let Some(uri) = join_payload(params, 1)
                     && let Some(path) = parse_file_uri(&uri)
                 {
                     let _ = self.app.emit(
-                        "pty:cwd",
-                        &serde_json::json!({ "rid": self.rid, "cwd": path }),
+                        EVENT_PTY_CWD,
+                        PtyCwd {
+                            rid: self.rid,
+                            cwd: path,
+                        },
                     );
                 }
             }

@@ -2,22 +2,27 @@ mod accent;
 mod appearance;
 mod config;
 mod icon;
+mod keycode;
 mod macos;
 mod osc;
 mod pty;
+mod shell;
 mod theme;
+mod vt;
+mod wire;
 
 use tauri::Manager;
 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
-use accent::get_accent_color;
-use appearance::set_window_appearance;
-use config::get_config;
-use pty::{pty_close, pty_resize, pty_spawn, pty_write};
-use theme::read_user_theme;
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,piyo_lib=debug")),
+        )
+        .init();
+
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("icon", icon::handle)
         .plugin(tauri_plugin_dialog::init())
@@ -26,7 +31,19 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
+        .invoke_handler(tauri::generate_handler![
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_close,
+            pty::pty_send_key,
+            pty::pty_send_mouse,
+            config::get_config,
+            theme::read_user_theme,
+            accent::get_accent_color,
+            appearance::set_window_appearance,
+        ])
+        .setup(move |app| {
             app.manage(config::load());
 
             #[cfg(target_os = "macos")]
@@ -49,16 +66,6 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            pty_spawn,
-            pty_write,
-            pty_resize,
-            pty_close,
-            get_config,
-            read_user_theme,
-            get_accent_color,
-            set_window_appearance
-        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

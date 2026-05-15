@@ -15,10 +15,14 @@
 ## 特長
 
 - ⚡ GPU アクセラレーションによる描画
+- 👻 Ghostty 製ターミナルエンジン
+- 🖼️ Kitty グラフィックス＆キーボードプロトコル
+- 🔤 Unicode と絵文字の完全サポート
 - 🍎 ネイティブな macOS の見た目と操作感
-- 🌐 多言語対応
+- 🗂️ タブ式ターミナルセッション
 - ✨ Claude Code および Codex CLI 連携
 - 🐚 Bash、Zsh、Fish、Nushell に対応
+- 🌐 多言語対応
 - 🎨 Shiki ベースのテーマ
 - ⚙️ TOML による設定
 

@@ -18,7 +18,8 @@
         "later": "Später"
     },
     "terminal": {
-        "processExited": "[Prozess beendet]"
+        "processExited": "[Prozess beendet]",
+        "searchPlaceholder": "Verlauf durchsuchen…"
     },
     "menu": {
         "file": "Datei",

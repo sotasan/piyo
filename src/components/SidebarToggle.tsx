@@ -15,6 +15,7 @@ function SidebarToggle({ collapsed, onClick }: Props) {
             type="button"
             aria-label={t(collapsed ? "sidebar.open" : "sidebar.close")}
             onClick={onClick}
+            tabIndex={-1}
             data-tauri-drag-region={false}
             className="flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent text-foreground hover:bg-foreground/10 hover:glass"
         >
