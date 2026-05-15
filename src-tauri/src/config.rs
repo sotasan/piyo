@@ -33,7 +33,7 @@ pub fn app_strategy() -> Result<impl AppStrategy> {
 
 pub fn load() -> Configuration {
     try_load().unwrap_or_else(|err| {
-        eprintln!("config: {err:#}; falling back to defaults");
+        tracing::warn!(error = %err, "config load failed; falling back to defaults");
         toml::from_str(DEFAULT_TOML).expect("default.toml must parse")
     })
 }

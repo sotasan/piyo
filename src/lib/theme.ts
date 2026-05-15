@@ -1,7 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { ITheme } from "@xterm/xterm";
 import { bundledThemes, type BundledTheme } from "shiki";
 
+import { readUserTheme, setWindowAppearance } from "@/ipc/commands";
 import { useThemeStore } from "@/stores/theme";
 
 const DEFAULT_THEME: BundledTheme = "rose-pine";
@@ -59,7 +59,7 @@ function pick(colors: Record<string, string>, keys: string[]): string | undefine
 }
 
 async function loadTheme(name: string): Promise<ShikiTheme> {
-    const userJson = await invoke<string | null>("read_user_theme", { name });
+    const userJson = await readUserTheme(name);
     if (userJson) {
         try {
             return JSON.parse(userJson) as ShikiTheme;
@@ -84,10 +84,7 @@ export async function applyTheme(name: string): Promise<void> {
     const cursor =
         pick(colors, ["terminalCursor.foreground", "editorCursor.foreground"]) ?? foreground;
     const border = pick(colors, ["panel.border", "contrastBorder", "editorGroup.border"]);
-    const selection = pick(colors, [
-        "terminal.selectionBackground",
-        "editor.selectionBackground",
-    ]);
+    const selection = pick(colors, ["terminal.selectionBackground", "editor.selectionBackground"]);
 
     const root = document.documentElement;
     root.style.setProperty("--theme-background", background);
@@ -122,7 +119,7 @@ export async function applyTheme(name: string): Promise<void> {
     const mode: "light" | "dark" = theme.type === "light" ? "light" : "dark";
     root.style.colorScheme = mode;
 
-    await invoke<void>("set_window_appearance", { mode }).catch((err) => {
+    await setWindowAppearance(mode).catch((err: unknown) => {
         console.warn("piyo: failed to set native window appearance", err);
     });
 

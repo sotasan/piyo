@@ -1,6 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
+
+import { getAccentColor } from "@/ipc/commands";
+import { onAccentChanged } from "@/ipc/events";
 
 const ACCENT_VAR = "--theme-accent";
 
@@ -18,9 +20,9 @@ export const useAccentStore = create<AccentStore>((set) => ({
 }));
 
 export async function applyAccent(): Promise<void> {
-    useAccentStore.getState().set(await invoke<string>("get_accent_color"));
+    useAccentStore.getState().set(await getAccentColor());
 }
 
 export function subscribeAccent(): Promise<UnlistenFn> {
-    return listen<string>("accent:changed", (e) => useAccentStore.getState().set(e.payload));
+    return onAccentChanged((hex) => useAccentStore.getState().set(hex));
 }

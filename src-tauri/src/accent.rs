@@ -1,3 +1,5 @@
+pub const EVENT_ACCENT_CHANGED: &str = "accent:changed";
+
 #[cfg(target_os = "macos")]
 mod platform {
     use std::ptr::NonNull;
@@ -7,7 +9,8 @@ mod platform {
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSUserDefaults, ns_string};
     use tauri::{AppHandle, Emitter};
 
-    const ACCENT_EVENT: &str = "accent:changed";
+    use super::EVENT_ACCENT_CHANGED;
+
     const FALLBACK: &str = "transparent";
 
     pub fn read_accent_hex() -> String {
@@ -31,7 +34,7 @@ mod platform {
 
     pub fn install_observer(app: AppHandle) {
         let block = RcBlock::new(move |_: NonNull<NSNotification>| {
-            app.emit(ACCENT_EVENT, read_accent_hex()).ok();
+            let _ = app.emit(EVENT_ACCENT_CHANGED, read_accent_hex());
         });
         let center = NSNotificationCenter::defaultCenter();
         unsafe {

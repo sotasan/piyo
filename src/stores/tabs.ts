@@ -1,15 +1,21 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { Channel } from "@tauri-apps/api/core";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
-export type PtyEvent = { kind: "data"; data: number[] } | { kind: "exit" };
+import { ptyClose, ptySpawn } from "@/ipc/commands";
+import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
+import { clearPtyModes, setPtyModes } from "@/lib/ptyModes";
+
+/** Raw bytes from the pty frame channel. The first byte is the
+ *  discriminator (see `wire::KIND_*`). */
+export type PtyEvent = ArrayBuffer;
 
 export type Tab = {
     id: number;
     title: string;
 };
 
-const tabChannels = new Map<number, Channel<PtyEvent>>();
+const tabChannels = new Map<number, Channel<ArrayBuffer>>();
 const tabHandlers = new Map<number, (event: PtyEvent) => void>();
 
 interface TabsStore {
@@ -41,14 +47,9 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     dims: { cols: 80, rows: 24 },
 
     spawn: async (cwd) => {
-        const channel = new Channel<PtyEvent>();
+        const channel = new Channel<ArrayBuffer>();
         const { cols, rows } = get().dims;
-        const { rid, shell } = await invoke<{ rid: number; shell: string }>("pty_spawn", {
-            events: channel,
-            cols,
-            rows,
-            cwd,
-        });
+        const { rid, shell } = await ptySpawn(channel, cols, rows, cwd);
         channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
         tabChannels.set(rid, channel);
         set((s) => ({
@@ -64,7 +65,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     },
 
     close: (rid) => {
-        invoke("pty_close", { rid }).catch((e) => console.error("pty_close failed", e));
+        void ptyClose(rid);
     },
 
     reorder: (oldIndex, newIndex) =>
@@ -122,6 +123,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             tabChannels.delete(rid);
             tabHandlers.delete(rid);
+            clearPtyModes(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
@@ -141,15 +143,13 @@ function pickNextActive(
 }
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
+    const store = useTabsStore.getState();
     const unlistens = await Promise.all([
-        listen<{ rid: number; title: string }>("pty:title", (e) =>
-            useTabsStore.getState().handleTitle(e.payload.rid, e.payload.title),
-        ),
-        listen<{ rid: number; cwd: string }>("pty:cwd", (e) =>
-            useTabsStore.getState().handleCwd(e.payload.rid, e.payload.cwd),
-        ),
-        listen<{ rid: number }>("pty:exit", (e) =>
-            useTabsStore.getState().handleExit(e.payload.rid),
+        onPtyTitle(({ rid, title }) => store.handleTitle(rid, title)),
+        onPtyCwd(({ rid, cwd }) => store.handleCwd(rid, cwd)),
+        onPtyExit(({ rid }) => store.handleExit(rid)),
+        onPtyModes(({ rid, mouseTracking, bracketedPaste, focusEvent }) =>
+            setPtyModes(rid, { mouseTracking, bracketedPaste, focusEvent }),
         ),
     ]);
     return () => unlistens.forEach((u) => u());

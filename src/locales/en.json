@@ -18,7 +18,8 @@
         "later": "Later"
     },
     "terminal": {
-        "processExited": "[process exited]"
+        "processExited": "[process exited]",
+        "searchPlaceholder": "Search scrollback…"
     },
     "menu": {
         "file": "File",
