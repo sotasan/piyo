@@ -216,79 +216,78 @@ impl Session {
     }
 
     fn snapshot(&mut self) -> Result<Option<Vec<u8>>> {
-        // Read the header values + scrollback delta in a scoped block so the
-        // borrow on render_state ends before we re-borrow self for the
-        // scrollback walk.
-        let (cols, rows, full, cursor, bg, fg, dirty_active) = {
-            let snap = self
-                .render_state
-                .update(&self.terminal)
-                .context("render state update failed")?;
-            let dirty_state = snap.dirty().context("reading dirty state failed")?;
-            (
-                snap.cols().context("reading cols failed")?,
-                snap.rows().context("reading rows failed")?,
-                matches!(dirty_state, Dirty::Full),
-                read_cursor(&snap)?,
-                snap.colors().context("reading colors failed")?.background,
-                snap.colors().context("reading colors failed")?.foreground,
-                !matches!(dirty_state, Dirty::Clean),
-            )
-        };
         let scrollback_rows = self.terminal.scrollback_rows().unwrap_or(0);
         let delta = scrollback_rows.saturating_sub(self.last_scrollback_rows);
-        if !dirty_active && delta == 0 {
+
+        let snap = self
+            .render_state
+            .update(&self.terminal)
+            .context("render state update failed")?;
+        let dirty_state = snap.dirty().context("reading dirty state failed")?;
+        if matches!(dirty_state, Dirty::Clean) && delta == 0 {
             return Ok(None);
         }
+        let full = matches!(dirty_state, Dirty::Full);
+        let cols = snap.cols().context("reading cols failed")?;
+        let rows = snap.rows().context("reading rows failed")?;
+        let colors = snap.colors().context("reading colors failed")?;
+        let cursor = read_cursor(&snap)?;
 
-        let mut buf = FrameBuf::new(cols, rows, full, cursor, bg, fg);
+        let mut buf = FrameBuf::new(
+            cols,
+            rows,
+            full,
+            cursor,
+            colors.background,
+            colors.foreground,
+        );
         if delta > 0 {
             buf.set_scrollback_promotions(u32::try_from(delta).unwrap_or(u32::MAX));
             self.last_scrollback_rows = scrollback_rows;
         }
 
-        let snap = self
-            .render_state
-            .update(&self.terminal)
-            .context("render state re-update failed")?;
-        let mut rows_iter = self
-            .row_iter
-            .update(&snap)
-            .context("updating row iterator failed")?;
-        let mut y: u16 = 0;
+        // Bind cell_iter to a local so the borrow checker sees it as
+        // disjoint from `row_iter` and `render_state` (which `snap` holds).
         // libghostty-vt's Snapshot::set / RowIteration::set helpers take the
         // address of their `&T` parameter instead of the T, so set_dirty
         // corrupts the C-side state and the next dirty() read fails. Skip
         // resetting; update() recomputes dirty bits. Present as of 2026-05-14.
-        while let Some(row) = rows_iter.next() {
-            let row_dirty = row.dirty().context("reading row dirty failed")?;
-            if row_dirty || full {
-                buf.start_active_row(y, cols);
-                let mut cell_it = self
-                    .cell_iter
-                    .update(row)
-                    .context("updating cell iterator failed")?;
-                let mut x: u16 = 0;
-                while let Some(cell) = cell_it.next() {
-                    let (codepoint, extras) = read_graphemes(cell)?;
-                    let style = cell.style().context("style failed")?;
-                    let fg = cell.fg_color().context("fg_color failed")?;
-                    let bg = cell.bg_color().context("bg_color failed")?;
-                    buf.push_active_cell(
-                        y,
-                        x,
-                        &Cell {
-                            codepoint,
-                            flags: wire::cell_flags(&style),
-                            fg,
-                            bg,
-                        },
-                        &extras,
-                    );
-                    x += 1;
+        {
+            let cell_iter = &mut self.cell_iter;
+            let mut rows_iter = self
+                .row_iter
+                .update(&snap)
+                .context("updating row iterator failed")?;
+            let mut y: u16 = 0;
+            while let Some(row) = rows_iter.next() {
+                let row_dirty = row.dirty().context("reading row dirty failed")?;
+                if row_dirty || full {
+                    buf.start_active_row(y, cols);
+                    let mut cell_it = cell_iter
+                        .update(row)
+                        .context("updating cell iterator failed")?;
+                    let mut x: u16 = 0;
+                    while let Some(cell) = cell_it.next() {
+                        let (codepoint, extras) = read_graphemes(cell)?;
+                        let style = cell.style().context("style failed")?;
+                        let fg = cell.fg_color().context("fg_color failed")?;
+                        let bg = cell.bg_color().context("bg_color failed")?;
+                        buf.push_active_cell(
+                            y,
+                            x,
+                            &Cell {
+                                codepoint,
+                                flags: wire::cell_flags(&style),
+                                fg,
+                                bg,
+                            },
+                            &extras,
+                        );
+                        x += 1;
+                    }
                 }
+                y += 1;
             }
-            y += 1;
         }
         self.collect_kitty_graphics(&mut buf)?;
         Ok(Some(buf.finish()))
