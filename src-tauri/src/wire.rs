@@ -33,6 +33,7 @@
 //!                    [i32 vp_col][i32 vp_row]
 //!                    [u32 px_w][u32 px_h]
 //!                    [u32 sx][u32 sy][u32 sw][u32 sh]
+//!                    [u32 x_offset][u32 y_offset]   sub-cell pixel offsets
 //! [u8 kind=0x02] exit (no payload)
 //! ```
 use bitflags::bitflags;
@@ -229,6 +230,8 @@ impl FrameBuf {
         source_y: u32,
         source_width: u32,
         source_height: u32,
+        x_offset: u32,
+        y_offset: u32,
     ) {
         let p = &mut self.placements;
         p.extend_from_slice(&image_id.to_le_bytes());
@@ -242,6 +245,8 @@ impl FrameBuf {
         p.extend_from_slice(&source_y.to_le_bytes());
         p.extend_from_slice(&source_width.to_le_bytes());
         p.extend_from_slice(&source_height.to_le_bytes());
+        p.extend_from_slice(&x_offset.to_le_bytes());
+        p.extend_from_slice(&y_offset.to_le_bytes());
         self.placement_count += 1;
     }
 

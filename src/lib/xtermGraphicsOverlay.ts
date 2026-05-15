@@ -26,6 +26,11 @@ type TrackedPlacement = {
     sourceY: number;
     sourceWidth: number;
     sourceHeight: number;
+    /** Sub-cell pixel offsets from the anchor cell's top-left. Kitty
+     *  placements can specify these via the `X`/`Y` parameters; ignoring
+     *  them leaves the image misaligned by up to a cell on each axis. */
+    xOffset: number;
+    yOffset: number;
     z: number;
 };
 
@@ -44,9 +49,16 @@ export type GraphicsOverlay = {
 
 /** Attach a kitty-graphics overlay canvas above xterm.js's text. The
  *  returned overlay must be repainted whenever the user scrolls xterm so
- *  images stay anchored to ghostty's active-region rows. */
+ *  images stay anchored to ghostty's active-region rows.
+ *
+ *  The canvas is appended to `.xterm-screen` (not `term.element`) so it
+ *  shares the same pixel origin as the text grid. Attaching to the outer
+ *  `.xterm` element would offset everything by the terminal's padding
+ *  and make images render half a cell too high. */
 export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
     if (!term.element) return null;
+    const screen = term.element.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen) return null;
     const canvas = document.createElement("canvas");
     canvas.style.position = "absolute";
     canvas.style.left = "0";
@@ -57,7 +69,7 @@ export function attachGraphicsOverlay(term: Terminal): GraphicsOverlay | null {
     canvas.style.zIndex = "5";
     canvas.width = 0;
     canvas.height = 0;
-    term.element.appendChild(canvas);
+    screen.appendChild(canvas);
     return {
         canvas,
         imageCache: new Map(),
@@ -109,6 +121,8 @@ export function decodeAndPaintOverlay(
         const sourceY = decoder.u32();
         const sourceWidth = decoder.u32();
         const sourceHeight = decoder.u32();
+        const xOffset = decoder.u32();
+        const yOffset = decoder.u32();
         const key = `${imageId}:${placementId}`;
         if (overlay.placements.has(key)) continue;
         const marker = term.registerMarker(viewportRow - cursorY);
@@ -124,6 +138,8 @@ export function decodeAndPaintOverlay(
             sourceY,
             sourceWidth,
             sourceHeight,
+            xOffset,
+            yOffset,
             z,
         });
     }
@@ -163,15 +179,17 @@ export function repaintOverlay(term: Terminal, overlay: GraphicsOverlay): void {
         if (!bm) continue;
         // marker.line is the placement's absolute row in xterm's buffer;
         // subtract viewportY to get its visible y. Off-screen placements
-        // are still drawn — the canvas clips them.
-        const y = (p.marker.line - viewportY) * cellHeight;
+        // are still drawn — the canvas clips them. Sub-cell offsets shift
+        // the image within its anchor cell, matching the kitty protocol's
+        // `X`/`Y` placement parameters.
+        const y = (p.marker.line - viewportY) * cellHeight + p.yOffset;
         ctx.drawImage(
             bm,
             p.sourceX,
             p.sourceY,
             p.sourceWidth,
             p.sourceHeight,
-            p.col * cellWidth,
+            p.col * cellWidth + p.xOffset,
             y,
             p.pixelWidth,
             p.pixelHeight,
