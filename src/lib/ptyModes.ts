@@ -17,6 +17,14 @@ const DEFAULT_MODES: PtyTermModes = {
 const modesByRid = new Map<number, PtyTermModes>();
 const modeListeners = new Map<number, (m: PtyTermModes) => void>();
 
+function clone(m: PtyTermModes): PtyTermModes {
+    return {
+        mouseTracking: m.mouseTracking,
+        bracketedPaste: m.bracketedPaste,
+        focusEvent: m.focusEvent,
+    };
+}
+
 export function setPtyModes(rid: number, modes: PtyTermModes): void {
     const prev = modesByRid.get(rid);
     if (
@@ -27,12 +35,15 @@ export function setPtyModes(rid: number, modes: PtyTermModes): void {
     ) {
         return;
     }
-    modesByRid.set(rid, modes);
-    modeListeners.get(rid)?.(modes);
+    // Clone on store so callers can't mutate our internal state later,
+    // and clone again when handing off to the listener for the same reason.
+    const stored = clone(modes);
+    modesByRid.set(rid, stored);
+    modeListeners.get(rid)?.(clone(stored));
 }
 
 export function getPtyModes(rid: number): PtyTermModes {
-    return modesByRid.get(rid) ?? DEFAULT_MODES;
+    return clone(modesByRid.get(rid) ?? DEFAULT_MODES);
 }
 
 export function clearPtyModes(rid: number): void {

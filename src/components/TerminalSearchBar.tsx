@@ -1,6 +1,7 @@
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal as XtermTerminal } from "@xterm/xterm";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
     searchRef: React.RefObject<SearchAddon | null>;
@@ -9,6 +10,7 @@ type Props = {
 };
 
 function TerminalSearchBar({ searchRef, termRef, onClose }: Props) {
+    const { t } = useTranslation();
     const [query, setQuery] = useState("");
 
     const reset = () => {
@@ -32,7 +34,7 @@ function TerminalSearchBar({ searchRef, termRef, onClose }: Props) {
                         else searchRef.current?.findNext(query);
                     }
                 }}
-                placeholder="Search scrollback…"
+                placeholder={t("terminal.searchPlaceholder")}
                 className="w-56 bg-transparent text-foreground outline-none placeholder:text-foreground/40"
             />
         </div>

@@ -66,6 +66,10 @@ export function packAttrs(flags: StyleFlags, fgRgb: Rgb | null, bgRgb: Rgb | nul
 
 type BufferLine = {
     setCellFromCodepoint: (x: number, codepoint: number, width: number, attrs: PackedAttrs) => void;
+    /** Append a codepoint to the cell at `x` without overwriting its attrs.
+     *  Used for combining marks / ZWJ-joined grapheme clusters so styling
+     *  from the base codepoint is preserved. */
+    addCodepointToCell: (x: number, codepoint: number, width: number) => void;
     isWrapped: boolean;
 };
 

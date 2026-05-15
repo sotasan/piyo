@@ -18,7 +18,8 @@
         "later": "後で"
     },
     "terminal": {
-        "processExited": "[プロセスが終了しました]"
+        "processExited": "[プロセスが終了しました]",
+        "searchPlaceholder": "スクロールバックを検索…"
     },
     "menu": {
         "file": "ファイル",
