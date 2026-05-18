@@ -89,13 +89,21 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             });
 
             term.attachCustomKeyEventHandler((event) => {
-                if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    term.clear();
-                    void ptyWrite(rid, "\x0c");
-                    return false;
-                }
-                if (event.type === "keydown" && event.metaKey && event.key === "f") {
-                    triggerSearch();
+                if (event.type === "keydown" && event.metaKey) {
+                    if (event.key === "k") {
+                        term.clear();
+                        void ptyWrite(rid, "\x0c");
+                        return false;
+                    }
+                    if (event.key === "f") {
+                        triggerSearch();
+                        return false;
+                    }
+                    // macOS Cmd+Arrow/Backspace/Delete readline shortcuts dispatch
+                    // here. Everything else with Cmd (Cmd+T new tab, Cmd+W close,
+                    // Cmd+V paste, etc.) we leave for the OS menu — returning false
+                    // skips xterm's encoding so it doesn't preventDefault.
+                    handleKey(rid, event);
                     return false;
                 }
                 return handleKey(rid, event);
