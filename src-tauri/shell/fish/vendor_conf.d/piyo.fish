@@ -1,5 +1,9 @@
-function _piyo_kitty_keyboard --on-event fish_preexec
+function _piyo_kitty_keyboard_on --on-event fish_preexec
     printf '\e[=1u'
+end
+
+function _piyo_kitty_keyboard_off --on-event fish_prompt
+    printf '\e[=0u'
 end
 
 function _piyo_cursor_bar --on-event fish_prompt
