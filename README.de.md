@@ -15,7 +15,6 @@
 ## Funktionen
 
 - ⚡ GPU-beschleunigtes Rendering
-- 👻 Ghostty-basierte Terminal-Engine
 - 🖼️ Kitty-Grafik- und Tastaturprotokoll
 - 🔤 Vollständige Unicode- und Emoji-Unterstützung
 - 🍎 Natives macOS-Erscheinungsbild
