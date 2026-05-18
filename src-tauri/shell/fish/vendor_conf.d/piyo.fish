@@ -1,5 +1,5 @@
-if status --is-interactive
-    printf '\e[>1u'
+function _piyo_kitty_keyboard --on-event fish_preexec
+    printf '\e[=1u'
 end
 
 function _piyo_cursor_bar --on-event fish_prompt
