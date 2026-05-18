@@ -28,6 +28,18 @@ function fontStack(family: string): string {
         .join(", ");
 }
 
+function getCellPx(term: XtermTerminal): { width: number; height: number } {
+    const cell = (
+        term as unknown as {
+            _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } };
+        }
+    )._core?._renderService?.dimensions?.css?.cell;
+    return {
+        width: Math.max(1, Math.round(cell?.width ?? 0)),
+        height: Math.max(1, Math.round(cell?.height ?? 0)),
+    };
+}
+
 type UseXtermOptions = {
     rid: number;
     active: boolean;
@@ -177,11 +189,13 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
             term.onData((data) => void ptyWrite(rid, data));
             term.onResize(({ cols, rows }) => {
-                void ptyResize(rid, cols, rows);
+                const cell = getCellPx(term);
+                void ptyResize(rid, cols, rows, cell.width, cell.height);
                 emitResize(cols, rows);
             });
 
-            void ptyResize(rid, term.cols, term.rows);
+            const initialCell = getCellPx(term);
+            void ptyResize(rid, term.cols, term.rows, initialCell.width, initialCell.height);
 
             focusIfActive(term);
         })().catch((e) => {

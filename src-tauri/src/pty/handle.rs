@@ -23,15 +23,17 @@ impl PtyHandle {
         Ok(())
     }
 
-    pub(super) fn resize(&self, cols: u16, rows: u16) -> Result<()> {
+    pub(super) fn resize(&self, cols: u16, rows: u16, cell_width: u32, cell_height: u32) -> Result<()> {
         self.master
             .lock()
             .unwrap()
             .resize(PtySize {
                 rows,
                 cols,
-                pixel_width: 0,
-                pixel_height: 0,
+                pixel_width: u16::try_from(cell_width.saturating_mul(u32::from(cols)))
+                    .unwrap_or(u16::MAX),
+                pixel_height: u16::try_from(cell_height.saturating_mul(u32::from(rows)))
+                    .unwrap_or(u16::MAX),
             })
             .context("failed to resize pty")?;
         Ok(())
