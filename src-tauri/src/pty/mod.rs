@@ -124,8 +124,15 @@ pub fn pty_write(app: AppHandle, rid: u32, data: String) -> CommandResult<()> {
 }
 
 #[tauri::command]
-pub fn pty_resize(app: AppHandle, rid: u32, cols: u16, rows: u16) -> CommandResult<()> {
-    handle(&app, rid)?.resize(cols, rows)?;
+pub fn pty_resize(
+    app: AppHandle,
+    rid: u32,
+    cols: u16,
+    rows: u16,
+    cell_width: u32,
+    cell_height: u32,
+) -> CommandResult<()> {
+    handle(&app, rid)?.resize(cols, rows, cell_width, cell_height)?;
     Ok(())
 }
 

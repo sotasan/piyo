@@ -20,7 +20,12 @@ export const ptySpawn = (
 
 export const ptyWrite = (rid: number, data: string) => invoke<void>("pty_write", { rid, data });
 
-export const ptyResize = (rid: number, cols: number, rows: number) =>
-    invoke<void>("pty_resize", { rid, cols, rows });
+export const ptyResize = (
+    rid: number,
+    cols: number,
+    rows: number,
+    cellWidth: number,
+    cellHeight: number,
+) => invoke<void>("pty_resize", { rid, cols, rows, cellWidth, cellHeight });
 
 export const ptyClose = (rid: number) => invoke<void>("pty_close", { rid });
