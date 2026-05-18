@@ -8,6 +8,7 @@ fi
 [[ -r "${ZDOTDIR-$HOME}/.zshenv" ]] && source "${ZDOTDIR-$HOME}/.zshenv"
 
 if [[ -o interactive ]]; then
+    print -n '\e[>1u'
     autoload -Uz add-zsh-hook
     _piyo_cursor_bar()   { print -n '\e[5 q\e[?12l\e[?12h' }
     _piyo_cursor_block() { print -n '\e[2 q' }

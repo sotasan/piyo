@@ -1,3 +1,7 @@
+if $nu.is-interactive {
+    print -n "\u{1b}[>1u"
+}
+
 if "PIYO_BIN" in $env {
     let bin = $env.PIYO_BIN
     let path = $env.PATH

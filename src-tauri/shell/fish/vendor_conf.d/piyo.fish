@@ -1,3 +1,7 @@
+if status --is-interactive
+    printf '\e[>1u'
+end
+
 function _piyo_cursor_bar --on-event fish_prompt
     printf '\e[5 q\e[?12l\e[?12h'
 end
