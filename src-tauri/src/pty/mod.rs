@@ -1,4 +1,4 @@
-//! PTY ownership and IPC commands.
+//! PTY ownership, IPC commands, and ghostty session orchestration.
 //!
 //! Submodules:
 //! - [`types`]: wire DTOs and IPC event names.
@@ -18,9 +18,11 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::osc::OscPerformer;
 use crate::shell::{self, ResourceDirs, Shell};
+use crate::vt::{self, Session};
+use crate::wire;
 
 pub use handle::PtyHandle;
-use handle::{ChildHandle, PtyWriter};
+use handle::{ChildHandle, SessionMsg};
 use types::{CommandResult, EVENT_PTY_EXIT, PtyExit, PtySpawned};
 pub use types::{EVENT_PTY_CWD, PtyCwd};
 
@@ -76,20 +78,26 @@ pub async fn pty_spawn(
     let child: ChildHandle = Arc::new(Mutex::new(Some(child)));
     let child_for_reader = child.clone();
 
-    let writer: PtyWriter = Arc::new(Mutex::new(writer));
+    let writer: vt::PtyWriter = Arc::new(Mutex::new(writer));
+
+    let (session_tx, session_rx) = std::sync::mpsc::channel::<SessionMsg>();
+    let session_tx_for_reader = session_tx.clone();
 
     let handle = PtyHandle {
         master: Mutex::new(pair.master),
         writer,
         child,
+        session_tx: Mutex::new(session_tx),
     };
 
     let rid = app.resources_table().add(handle);
 
-    let app_for_reader = app.clone();
+    // Reader thread: pulls bytes from the PTY, taps OSC dispatches, and
+    // hands each chunk to the vt session for cell parsing and forwarding.
+    let app_for_osc = app.clone();
     tokio::task::spawn_blocking(move || {
         let mut parser = vte::Parser::new();
-        let mut performer = OscPerformer::new(app_for_reader.clone(), rid);
+        let mut performer = OscPerformer::new(app_for_osc, rid);
         let mut buf = [0u8; READ_BUF_SIZE];
         loop {
             match reader.read(&mut buf) {
@@ -97,8 +105,8 @@ pub async fn pty_spawn(
                 Ok(n) => {
                     let chunk = &buf[..n];
                     parser.advance(&mut performer, chunk);
-                    if events
-                        .send(InvokeResponseBody::Raw(chunk.to_vec()))
+                    if session_tx_for_reader
+                        .send(SessionMsg::Bytes(chunk.to_vec()))
                         .is_err()
                     {
                         break;
@@ -108,7 +116,59 @@ pub async fn pty_spawn(
             }
         }
         reap(&child_for_reader);
-        let _ = app_for_reader.emit(EVENT_PTY_EXIT, PtyExit { rid });
+        let _ = session_tx_for_reader.send(SessionMsg::Shutdown);
+    });
+
+    // Session thread: owns the !Send libghostty Terminal. Receives byte
+    // chunks, forwards them verbatim to xterm.js as KIND_BYTES messages,
+    // then ships a KIND_FRAME with ghostty's cell snapshot. Ordering is
+    // preserved because both messages leave the same thread.
+    let events_clone = events.clone();
+    let app_for_session = app.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut session = match Session::new(cols, rows) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("vt session init failed: {e:#}");
+                return;
+            }
+        };
+        while let Ok(msg) = session_rx.recv() {
+            match msg {
+                SessionMsg::Bytes(chunk) => {
+                    if events_clone
+                        .send(InvokeResponseBody::Raw(wire::bytes_event(&chunk)))
+                        .is_err()
+                    {
+                        break;
+                    }
+                    match session.feed(&chunk) {
+                        Ok(Some(frame)) => {
+                            if events_clone.send(InvokeResponseBody::Raw(frame)).is_err() {
+                                break;
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!("vt feed failed: {e:#}");
+                        }
+                    }
+                }
+                SessionMsg::Resize {
+                    cols,
+                    rows,
+                    cell_width_px,
+                    cell_height_px,
+                } => {
+                    if let Err(e) = session.resize(cols, rows, cell_width_px, cell_height_px) {
+                        tracing::warn!("vt resize failed: {e:#}");
+                    }
+                }
+                SessionMsg::Shutdown => break,
+            }
+        }
+        let _ = events_clone.send(InvokeResponseBody::Raw(wire::exit_event()));
+        let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });
     });
 
     Ok(PtySpawned {
