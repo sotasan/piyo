@@ -119,6 +119,7 @@ function App() {
                 ) : (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <TabTitle
+                            rid={activeId!}
                             cwd={activeCwd}
                             title={activeTitle}
                             className="text-sm text-foreground"
