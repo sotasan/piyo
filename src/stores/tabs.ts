@@ -4,8 +4,7 @@ import type { IProgressState } from "@xterm/addon-progress";
 import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
-import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
-import { setPtyModes } from "@/lib/ptyModes";
+import { onPtyCwd, onPtyExit } from "@/ipc/events";
 
 /** Raw bytes from the pty frame channel. The first byte is the
  *  discriminator (see `wire::KIND_*`). */
@@ -163,12 +162,8 @@ function pickNextActive(
 export async function subscribeTabs(): Promise<UnlistenFn> {
     const store = useTabsStore.getState();
     const unlistens = await Promise.all([
-        onPtyTitle(({ rid, title }) => store.handleTitle(rid, title)),
         onPtyCwd(({ rid, cwd }) => store.handleCwd(rid, cwd)),
         onPtyExit(({ rid }) => store.handleExit(rid)),
-        onPtyModes(({ rid, mouseTracking, bracketedPaste, focusEvent }) =>
-            setPtyModes(rid, { mouseTracking, bracketedPaste, focusEvent }),
-        ),
     ]);
     return () => unlistens.forEach((u) => u());
 }
