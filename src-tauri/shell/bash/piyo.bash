@@ -1,3 +1,5 @@
+printf '\e[>1u'
+
 for _piyo_rc in /etc/profile "$HOME/.bash_profile" "$HOME/.bashrc"; do
     [ -r "$_piyo_rc" ] && . "$_piyo_rc"
 done
