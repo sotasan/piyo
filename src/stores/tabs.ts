@@ -1,10 +1,11 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { IProgressState } from "@xterm/addon-progress";
 import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit, onPtyModes, onPtyTitle } from "@/ipc/events";
-import { clearPtyModes, setPtyModes } from "@/lib/ptyModes";
+import { setPtyModes } from "@/lib/ptyModes";
 
 /** Raw bytes from the pty frame channel. The first byte is the
  *  discriminator (see `wire::KIND_*`). */
@@ -23,6 +24,7 @@ interface TabsStore {
     activeId: number | null;
     cwds: Map<number, string>;
     dims: { cols: number; rows: number };
+    progress: Map<number, IProgressState>;
 
     spawn: (cwd: string | null) => Promise<number>;
     spawnSibling: () => Promise<number>;
@@ -34,6 +36,7 @@ interface TabsStore {
     showAtIndex: (index: number) => void;
     setDims: (cols: number, rows: number) => void;
     subscribeToTab: (rid: number, handler: (event: PtyEvent) => void) => () => void;
+    setProgress: (rid: number, state: IProgressState) => void;
 
     handleTitle: (rid: number, title: string) => void;
     handleCwd: (rid: number, cwd: string) => void;
@@ -45,6 +48,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     activeId: null,
     cwds: new Map(),
     dims: { cols: 80, rows: 24 },
+    progress: new Map(),
 
     spawn: async (cwd) => {
         const channel = new Channel<ArrayBuffer>();
@@ -107,6 +111,14 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         };
     },
 
+    setProgress: (rid, state) =>
+        set((s) => {
+            const next = new Map(s.progress);
+            if (state.state === 0) next.delete(rid);
+            else next.set(rid, state);
+            return { progress: next };
+        }),
+
     handleTitle: (rid, title) =>
         set((s) => ({
             tabs: s.tabs.map((t) => (t.id === rid ? { ...t, title } : t)),
@@ -123,11 +135,17 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         set((s) => {
             tabChannels.delete(rid);
             tabHandlers.delete(rid);
-            clearPtyModes(rid);
             const cwds = new Map(s.cwds);
             cwds.delete(rid);
+            const progress = new Map(s.progress);
+            progress.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
-            return { tabs: next, activeId: pickNextActive(rid, s.tabs, next, s.activeId), cwds };
+            return {
+                tabs: next,
+                activeId: pickNextActive(rid, s.tabs, next, s.activeId),
+                cwds,
+                progress,
+            };
         }),
 }));
 
