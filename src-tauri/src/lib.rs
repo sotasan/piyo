@@ -2,14 +2,11 @@ mod accent;
 mod appearance;
 mod config;
 mod icon;
-mod keycode;
 mod macos;
 mod osc;
 mod pty;
 mod shell;
 mod theme;
-mod vt;
-mod wire;
 
 use tauri::Manager;
 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
@@ -36,8 +33,6 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
-            pty::pty_send_key,
-            pty::pty_send_mouse,
             config::get_config,
             theme::read_user_theme,
             accent::get_accent_color,
