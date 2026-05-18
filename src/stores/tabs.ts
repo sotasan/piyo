@@ -6,8 +6,7 @@ import { create } from "zustand";
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit } from "@/ipc/events";
 
-/** Raw bytes from the pty frame channel. The first byte is the
- *  discriminator (see `wire::KIND_*`). */
+/** Raw bytes forwarded from the PTY reader thread. */
 export type PtyEvent = ArrayBuffer;
 
 export type Tab = {
