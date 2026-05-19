@@ -9,18 +9,15 @@
 //! stay with xterm.js — the same PTY bytes are forwarded to its parser
 //! alongside the frame stream, so its native handling keeps working.
 
-mod decode;
-
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use libghostty_vt::{
     Terminal, TerminalOptions,
-    render::{CellIterator, Dirty, RenderState, RowIterator},
+    render::{CellIteration, CellIterator, Dirty, RenderState, RowIterator, Snapshot},
 };
 
-use crate::wire::FrameBuf;
-use decode::{read_cursor, read_graphemes};
+use crate::wire::{CursorInfo, FrameBuf};
 
 /// Shared handle to the PTY master writer. Ghostty's `on_pty_write`
 /// callback (DA / DSR responses) pushes through this.
@@ -127,4 +124,21 @@ impl Session {
         }
         Ok(Some(buf.finish()))
     }
+}
+
+fn read_graphemes(cell: &CellIteration<'_, '_>) -> Result<(u32, Vec<char>)> {
+    let len = cell.graphemes_len().context("graphemes_len failed")?;
+    if len == 0 {
+        return Ok((0, Vec::new()));
+    }
+    let chars = cell.graphemes().context("graphemes failed")?;
+    let first = chars.first().copied().unwrap_or(' ');
+    Ok((first as u32, chars.into_iter().skip(1).collect()))
+}
+
+fn read_cursor(snap: &Snapshot<'_, '_>) -> Result<Option<CursorInfo>> {
+    let Some(vp) = snap.cursor_viewport().context("cursor_viewport failed")? else {
+        return Ok(None);
+    };
+    Ok(Some(CursorInfo { x: vp.x, y: vp.y }))
 }

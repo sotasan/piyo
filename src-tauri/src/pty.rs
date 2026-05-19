@@ -1,18 +1,13 @@
 //! PTY ownership, IPC commands, and ghostty session orchestration.
-//!
-//! Submodules:
-//! - [`types`]: wire DTOs and IPC event names.
-//! - [`handle`]: [`PtyHandle`] resource.
 
-mod handle;
-mod types;
-
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
-use anyhow::Context;
-use portable_pty::{PtySize, native_pty_system};
+use anyhow::{Context, Result};
+use portable_pty::{MasterPty, PtySize, native_pty_system};
+use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -21,12 +16,109 @@ use crate::shell::{self, ResourceDirs, Shell};
 use crate::vt::{self, Session};
 use crate::wire;
 
-pub use handle::PtyHandle;
-use handle::{ChildHandle, SessionMsg};
-use types::{CommandResult, EVENT_PTY_EXIT, PtyExit, PtySpawned};
-pub use types::{EVENT_PTY_CWD, PtyCwd};
+pub const EVENT_PTY_CWD: &str = "pty:cwd";
+pub const EVENT_PTY_EXIT: &str = "pty:exit";
 
 const READ_BUF_SIZE: usize = 4096;
+
+#[derive(Debug)]
+pub struct CommandError(anyhow::Error);
+
+impl<E: Into<anyhow::Error>> From<E> for CommandError {
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
+
+impl Serialize for CommandError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{:#}", self.0))
+    }
+}
+
+pub type CommandResult<T> = Result<T, CommandError>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyCwd {
+    pub rid: u32,
+    pub cwd: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PtyExit {
+    rid: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtySpawned {
+    pub rid: u32,
+    pub shell: String,
+}
+
+enum SessionMsg {
+    Bytes(Vec<u8>),
+    Resize {
+        cols: u16,
+        rows: u16,
+        cell_width_px: u32,
+        cell_height_px: u32,
+    },
+    Shutdown,
+}
+
+type ChildHandle = Arc<Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>>;
+
+pub struct PtyHandle {
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: vt::PtyWriter,
+    child: ChildHandle,
+    session_tx: Mutex<Sender<SessionMsg>>,
+}
+
+impl tauri::Resource for PtyHandle {}
+
+impl PtyHandle {
+    fn send(&self, msg: SessionMsg) {
+        let _ = self.session_tx.lock().unwrap().send(msg);
+    }
+
+    fn write(&self, data: &[u8]) -> Result<()> {
+        let mut w = self.writer.lock().unwrap();
+        w.write_all(data).context("failed to write to pty")?;
+        w.flush().context("failed to flush pty")?;
+        Ok(())
+    }
+
+    fn resize(&self, cols: u16, rows: u16, cw: u32, ch: u32) -> Result<()> {
+        self.master
+            .lock()
+            .unwrap()
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: u16::try_from(cw.saturating_mul(u32::from(cols))).unwrap_or(u16::MAX),
+                pixel_height: u16::try_from(ch.saturating_mul(u32::from(rows))).unwrap_or(u16::MAX),
+            })
+            .context("failed to resize pty")?;
+        self.send(SessionMsg::Resize {
+            cols,
+            rows,
+            cell_width_px: cw,
+            cell_height_px: ch,
+        });
+        Ok(())
+    }
+
+    fn shutdown(&self) {
+        if let Some(child) = self.child.lock().unwrap().as_mut() {
+            let _ = child.kill();
+        }
+        self.send(SessionMsg::Shutdown);
+    }
+}
 
 #[tauri::command]
 pub async fn pty_spawn(
