@@ -7,6 +7,8 @@ mod osc;
 mod pty;
 mod shell;
 mod theme;
+mod vt;
+mod wire;
 
 use tauri::Manager;
 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};

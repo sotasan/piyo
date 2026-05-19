@@ -15,6 +15,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
 import { i18next } from "@/lib/i18n";
+import { applyFrame, KIND_BYTES, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
 import { handleKey } from "@/lib/xtermInput";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
@@ -32,7 +33,11 @@ function fontStack(family: string): string {
 function getCellPx(term: XtermTerminal): { width: number; height: number } {
     const cell = (
         term as unknown as {
-            _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } };
+            _core?: {
+                _renderService?: {
+                    dimensions?: { css?: { cell?: { width: number; height: number } } };
+                };
+            };
         }
     )._core?._renderService?.dimensions?.css?.cell;
     return {
@@ -94,8 +99,22 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 allowProposedApi: true,
                 scrollback: SCROLLBACK_ROWS,
                 vtExtensions: { kittyKeyboard: true },
+                // Ghostty owns reflow: on resize it repaints the visible grid
+                // and signals scrollback evictions explicitly. xterm.js's own
+                // reflow would wrap our already-rendered cells and dump the
+                // interim rows into scrollback before ghostty's repaint
+                // arrives. Setting windowsPty.buildNumber to a non-conpty
+                // value flips xterm's internal _isReflowEnabled to false
+                // (Buffer.ts) — the documented escape hatch for hosts that
+                // own their own reflow.
+                windowsPty: { buildNumber: 1 },
             });
             termRef.current = term;
+            // Debug hook: poke at the live Terminal instance from devtools
+            // via `__piyoTerm._core.buffer.lines.get(N)`, addon state,
+            // etc. Last writer wins when multiple tabs exist; that's fine
+            // for diagnosis.
+            (window as unknown as { __piyoTerm: typeof term }).__piyoTerm = term;
             cleanups.push(() => {
                 term.dispose();
                 termRef.current = null;
@@ -185,12 +204,86 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             try {
                 term.loadAddon(new ImageAddon());
             } catch {}
+            // Work around an addon-image bug: `chafa --format=kitty` and `viu`
+            // close their chunked transmissions with `\e_Gm=0\e\\` — an APC
+            // chunk that carries the `m=0` final-chunk flag but no semicolon
+            // and no payload. addon-image's `_handleNoPayloadCommand` only
+            // handles delete / query / placement actions in that path; the
+            // default transmit case silently drops the close-out, leaving
+            // every preceding `m=1` chunk's data orphaned in
+            // `_pendingTransmissions`. Fake `end()` into the with-payload
+            // finalize path so it pulls from pending and renders. Smaller
+            // and easier to maintain than a bundle patch.
+            type KittyHandler = {
+                _aborted: boolean;
+                _inControlData: boolean;
+                _controlLength: number;
+                _controlData: Uint32Array;
+                _parsedCommand: { more?: number; action?: string; id?: number } | null;
+                _pendingTransmissions: Map<number, unknown>;
+                _lastPendingKey: number | undefined;
+                _parseControlDataString: () => string;
+                end: (success: boolean) => boolean | Promise<boolean>;
+            };
+            const apcHandlers = (
+                term as unknown as {
+                    _core: {
+                        _inputHandler: {
+                            _parser: { _apcParser: { _handlers: Record<string, KittyHandler[]> } };
+                        };
+                    };
+                }
+            )._core._inputHandler._parser._apcParser._handlers;
+            const kittyHandler = apcHandlers?.["71"]?.[0];
+            if (kittyHandler) {
+                const origEnd = kittyHandler.end.bind(kittyHandler);
+                kittyHandler.end = function (success: boolean) {
+                    if (success && !this._aborted && this._inControlData) {
+                        const ctrl = this._parseControlDataString();
+                        // The closing chunk we care about looks like `m=0` (with
+                        // optional `i=N`). If a pending transmission exists,
+                        // hand it off to the normal finalize path by clearing
+                        // _inControlData and seeding _parsedCommand.
+                        const more = /(?:^|,)m=(\d)/.exec(ctrl)?.[1];
+                        const action = /(?:^|,)a=(\w)/.exec(ctrl)?.[1] ?? "t";
+                        if (more === "0" && action === "t") {
+                            const idStr = /(?:^|,)i=(\d+)/.exec(ctrl)?.[1];
+                            const id = idStr ? Number(idStr) : undefined;
+                            const pendingKey = id ?? this._lastPendingKey ?? 0;
+                            if (this._pendingTransmissions.has(pendingKey)) {
+                                this._inControlData = false;
+                                this._parsedCommand = {
+                                    more: 0,
+                                    action: "t",
+                                    ...(id !== undefined ? { id } : {}),
+                                };
+                            }
+                        }
+                    }
+                    return origEnd(success);
+                };
+            }
             fit.fit();
             ro.observe(container);
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
-                term.write(new Uint8Array(event));
+                const kind = new DataView(event).getUint8(0);
+                if (kind === KIND_BYTES) {
+                    // Raw PTY bytes — feed xterm.js's parser so modes, OSC,
+                    // APC kitty graphics (addon-image, including its
+                    // chunked transmission state machine), kitty keyboard,
+                    // title, and bell all keep working. Ordering vs.
+                    // KIND_FRAME doesn't matter: addon-image cells carry
+                    // BgFlags.HAS_EXTENDED, which applyFrame preserves;
+                    // plain cells get ghostty's codepoint on top of
+                    // xterm.js's fg/bg.
+                    term.write(new Uint8Array(event, 1));
+                } else if (kind === KIND_FRAME) {
+                    applyFrame(term, event);
+                } else if (kind === KIND_EXIT) {
+                    term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
+                }
             });
 
             term.onData((data) => void ptyWrite(rid, data));
