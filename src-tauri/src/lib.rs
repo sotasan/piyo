@@ -11,7 +11,6 @@ mod vt;
 mod wire;
 
 use tauri::Manager;
-use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -45,6 +44,8 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
+                use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
+
                 let main = app
                     .get_webview_window("main")
                     .expect("main window missing in tauri.conf.json");
