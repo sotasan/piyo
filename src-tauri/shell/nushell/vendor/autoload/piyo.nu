@@ -1,3 +1,5 @@
+# Pin piyo's bundled helper bin to the front of PATH so it overrides any
+# user-installed equivalents (idempotent, runs once at autoload).
 if "PIYO_BIN" in $env {
     let bin = $env.PIYO_BIN
     let path = $env.PATH
@@ -6,6 +8,10 @@ if "PIYO_BIN" in $env {
     }
 }
 
+# pre_prompt: pop kitty keyboard mode (readline doesn't want it), switch to
+# bar cursor with steady blink, and emit OSC 7 with a url-encoded cwd. The
+# OSC 7 spec wants percent-encoded paths; bash/zsh/fish punt on this, but
+# `url encode` is one builtin call in nu so we do it right.
 $env.config.hooks.pre_prompt = (
     ($env.config.hooks.pre_prompt? | default [])
     | append {|| print -n "\u{1b}[<u" }
@@ -16,6 +22,8 @@ $env.config.hooks.pre_prompt = (
     }
 )
 
+# pre_execution: push kitty keyboard mode 1 (TUI apps want Shift+Enter etc.)
+# and switch to block cursor for the duration of the command.
 $env.config.hooks.pre_execution = (
     ($env.config.hooks.pre_execution? | default [])
     | append {|| print -n "\u{1b}[>1u" }
