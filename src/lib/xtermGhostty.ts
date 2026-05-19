@@ -1,9 +1,11 @@
 /**
  * Decode the packed binary frames produced by `crate::wire::FrameBuf` and
- * paint them directly into xterm.js's buffer.
+ * paint ghostty's codepoints + grapheme overlays into xterm.js's buffer.
  *
- * Wire format: see `src-tauri/src/wire.rs`. Single-byte discriminator:
- *   0x01 = frame, 0x02 = exit, 0x03 = raw PTY bytes.
+ * Ghostty only contributes cell text and post-reflow cursor position;
+ * fg/bg/style and cursor visual style stay with xterm.js (it sees the same
+ * bytes via KIND_BYTES and resolves palette colors against the user's
+ * theme). Wire format: see `src-tauri/src/wire.rs`.
  */
 import type { Terminal } from "@xterm/xterm";
 
@@ -19,18 +21,10 @@ export const KIND_BYTES = 0x03;
 // Mirrors `wire::FrameFlags`.
 const FRAME_FULL = 1 << 0;
 const FRAME_CURSOR = 1 << 1;
-// Mirrors `wire::ColorFlags`.
-const COLOR_FG = 1 << 0;
-const COLOR_BG = 1 << 1;
-const COLOR_GRAPHEME = 1 << 2;
+// Mirrors `wire::CELL_GRAPHEME`.
+const CELL_GRAPHEME = 1 << 0;
 
 const SPACE = 0x20;
-const CURSOR_STYLES: Record<number, "block" | "underline" | "bar"> = {
-    0: "block",
-    1: "block",
-    2: "underline",
-    3: "bar",
-};
 
 /** Walk one binary frame and apply it directly to `term`. */
 export function applyFrame(term: Terminal, bytes: ArrayBuffer): void {
@@ -38,18 +32,8 @@ export function applyFrame(term: Terminal, bytes: ArrayBuffer): void {
     const kind = decoder.u8();
     if (kind !== KIND_FRAME) return;
     const frameFlags = decoder.u8();
-    decoder.u16(); // cols, unused on render side
-    decoder.u16(); // rows, unused on render side
     const cursor =
-        (frameFlags & FRAME_CURSOR) !== 0
-            ? {
-                  x: decoder.u16(),
-                  y: decoder.u16(),
-                  style: decoder.u8(),
-                  blink: decoder.u8() !== 0,
-                  visible: decoder.u8() !== 0,
-              }
-            : null;
+        (frameFlags & FRAME_CURSOR) !== 0 ? { x: decoder.u16(), y: decoder.u16() } : null;
     const fullRedraw = (frameFlags & FRAME_FULL) !== 0;
 
     const buffer = getBuffer(term);
@@ -64,18 +48,7 @@ export function applyFrame(term: Terminal, bytes: ArrayBuffer): void {
         const line = buffer.lines?.get(buffer.ybase + y);
         for (let x = 0; x < cellCount; x++) {
             const codepoint = decoder.u32();
-            // We still decode style + fg/bg from the wire format for now,
-            // but discard them: ghostty resolves palette colors against
-            // its own default palette, which doesn't match xterm.js's
-            // theme. Apps like lazygit use palette colors heavily, so
-            // overwriting xterm.js's interpretation would visibly flip
-            // every colored cell on each chunk. xterm.js's parser already
-            // wrote the right attrs during this chunk's `term.write`;
-            // we keep them and only overwrite the codepoint.
-            decoder.u8(); // styleFlags (unused)
-            const colorFlags = decoder.u8();
-            if ((colorFlags & COLOR_FG) !== 0) decoder.skip(3);
-            if ((colorFlags & COLOR_BG) !== 0) decoder.skip(3);
+            const cellFlags = decoder.u8();
             if (!line) continue;
             // Skip cells owned by xterm.js addons (addon-image image
             // tiles, OSC 8 hyperlinks) — they ride on
@@ -89,7 +62,7 @@ export function applyFrame(term: Terminal, bytes: ArrayBuffer): void {
                 extended: EMPTY_PRESERVED,
             };
             line.setCellFromCodepoint(x, cp, 1, attrs);
-            if ((colorFlags & COLOR_GRAPHEME) !== 0) {
+            if ((cellFlags & CELL_GRAPHEME) !== 0) {
                 graphemeAttrs.set((y << 16) | x, attrs);
             }
         }
@@ -123,9 +96,6 @@ export function applyFrame(term: Terminal, bytes: ArrayBuffer): void {
     if (cursor) {
         buffer.x = cursor.x;
         buffer.y = cursor.y;
-        const desired = CURSOR_STYLES[cursor.style];
-        if (desired && term.options.cursorStyle !== desired) term.options.cursorStyle = desired;
-        if (term.options.cursorBlink !== cursor.blink) term.options.cursorBlink = cursor.blink;
     }
 
     if (minRow <= maxRow) refresh(term, minRow, maxRow);

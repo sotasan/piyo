@@ -19,7 +19,7 @@ use libghostty_vt::{
     render::{CellIterator, Dirty, RenderState, RowIterator},
 };
 
-use crate::wire::{self, Cell, FrameBuf};
+use crate::wire::FrameBuf;
 use decode::{read_cursor, read_graphemes};
 
 /// Shared handle to the PTY master writer. Ghostty's `on_pty_write`
@@ -91,10 +91,9 @@ impl Session {
         }
         let full = matches!(dirty_state, Dirty::Full);
         let cols = snap.cols().context("reading cols failed")?;
-        let rows = snap.rows().context("reading rows failed")?;
         let cursor = read_cursor(&snap)?;
 
-        let mut buf = FrameBuf::new(cols, rows, full, cursor);
+        let mut buf = FrameBuf::new(full, cursor);
 
         // Bind cell_iter to a local so the borrow checker sees it as
         // disjoint from `row_iter` and `render_state` (which `snap` holds).
@@ -119,20 +118,7 @@ impl Session {
                     let mut x: u16 = 0;
                     while let Some(cell) = cell_it.next() {
                         let (codepoint, extras) = read_graphemes(cell)?;
-                        let style = cell.style().context("style failed")?;
-                        let fg = cell.fg_color().context("fg_color failed")?;
-                        let bg = cell.bg_color().context("bg_color failed")?;
-                        buf.push_active_cell(
-                            y,
-                            x,
-                            &Cell {
-                                codepoint,
-                                flags: wire::cell_flags(&style),
-                                fg,
-                                bg,
-                            },
-                            &extras,
-                        );
+                        buf.push_active_cell(y, x, codepoint, &extras);
                         x += 1;
                     }
                 }
