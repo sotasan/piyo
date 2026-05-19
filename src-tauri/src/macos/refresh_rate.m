@@ -1,5 +1,5 @@
 #import <WebKit/WebKit.h>
-#import "piyo.h"
+#import "bindings.h"
 
 @interface WKPreferences (PiyoPrivate)
 + (NSArray *)_features;
