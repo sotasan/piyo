@@ -1,67 +1,22 @@
 /**
- * Single typed gateway to xterm.js internals (`_core`, the buffer-cell bit
- * layout, etc.). Every other file in `src/` MUST go through this shim so the
+ * Single typed gateway to xterm.js internals (`_core`, the buffer layout,
+ * etc.). Every other file in `src/` MUST go through this shim so the
  * blast radius of an xterm.js upgrade is contained here.
- *
- * The bit-packing constants below are copied verbatim from
- * `node_modules/@xterm/xterm/src/common/buffer/Constants.ts` at the time of
- * writing. If you bump `@xterm/xterm`, re-read that file and confirm these
- * still match.
  */
 import type { Terminal } from "@xterm/xterm";
 
-import type { Rgb } from "@/lib/binaryDecoder";
-
-const CM_RGB = 0x3000000;
-const FG_INVERSE = 0x04000000;
-const FG_BOLD = 0x08000000;
-const FG_UNDERLINE = 0x10000000;
-const FG_BLINK = 0x20000000;
-const FG_INVISIBLE = 0x40000000;
-const FG_STRIKETHROUGH = 0x80000000;
-const BG_ITALIC = 0x04000000;
-const BG_DIM = 0x08000000;
 /** `BgFlags.HAS_EXTENDED` — set by xterm.js on cells that have entries in
  *  `BufferLine._extendedAttrs`, e.g. addon-image's image-tile metadata and
  *  OSC 8 hyperlink IDs. `applyFrame` skips overwriting those cells so the
- *  addon-owned state survives ghostty's per-chunk push. */
+ *  addon-owned state survives ghostty's per-chunk push. Mirrors the value
+ *  in `node_modules/@xterm/xterm/src/common/buffer/Constants.ts`. */
 export const BG_HAS_EXTENDED = 0x10000000;
-
-const EMPTY_EXTENDED = Object.freeze({});
 
 export type PackedAttrs = {
     fg: number;
     bg: number;
     extended: Readonly<Record<string, never>>;
 };
-
-export type StyleFlags = number;
-export const STYLE_BOLD = 1;
-export const STYLE_ITALIC = 2;
-export const STYLE_UNDERLINE = 4;
-export const STYLE_INVERSE = 8;
-export const STYLE_FAINT = 16;
-export const STYLE_STRIKETHROUGH = 32;
-export const STYLE_BLINK = 64;
-export const STYLE_INVISIBLE = 128;
-
-function packColor(rgb: Rgb): number {
-    return CM_RGB | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
-}
-
-export function packAttrs(flags: StyleFlags, fgRgb: Rgb | null, bgRgb: Rgb | null): PackedAttrs {
-    let fg = fgRgb ? packColor(fgRgb) : 0;
-    let bg = bgRgb ? packColor(bgRgb) : 0;
-    if (flags & STYLE_BOLD) fg |= FG_BOLD;
-    if (flags & STYLE_UNDERLINE) fg |= FG_UNDERLINE;
-    if (flags & STYLE_INVERSE) fg |= FG_INVERSE;
-    if (flags & STYLE_BLINK) fg |= FG_BLINK;
-    if (flags & STYLE_INVISIBLE) fg |= FG_INVISIBLE;
-    if (flags & STYLE_STRIKETHROUGH) fg |= FG_STRIKETHROUGH;
-    if (flags & STYLE_ITALIC) bg |= BG_ITALIC;
-    if (flags & STYLE_FAINT) bg |= BG_DIM;
-    return { fg, bg, extended: EMPTY_EXTENDED };
-}
 
 type BufferLine = {
     setCellFromCodepoint: (x: number, codepoint: number, width: number, attrs: PackedAttrs) => void;
