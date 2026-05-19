@@ -271,16 +271,19 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 const kind = new DataView(event).getUint8(0);
                 if (kind === KIND_BYTES) {
                     // Raw PTY bytes — feed xterm.js's parser so modes, OSC,
-                    // APC kitty graphics (addon-image, including its
-                    // chunked transmission state machine), kitty keyboard,
-                    // title, and bell all keep working. Ordering vs.
-                    // KIND_FRAME doesn't matter: addon-image cells carry
-                    // BgFlags.HAS_EXTENDED, which applyFrame preserves;
-                    // plain cells get ghostty's codepoint on top of
-                    // xterm.js's fg/bg.
+                    // APC kitty graphics (addon-image), kitty keyboard,
+                    // title, and bell all keep working.
                     term.write(new Uint8Array(event, 1));
                 } else if (kind === KIND_FRAME) {
-                    applyFrame(term, event);
+                    // term.write() queues parsing onto the next tick. If we
+                    // ran applyFrame synchronously here, line.getFg/getBg
+                    // would return stale attrs (xterm.js hasn't parsed the
+                    // chunk's SGR sequences yet) and moving the cursor to
+                    // ghostty's position would desync xterm.js's parser
+                    // — its later writes would land at the wrong cells.
+                    // Defer via the write callback so xterm.js drains
+                    // first, then ghostty overwrites codepoints in place.
+                    term.write("", () => applyFrame(term, event));
                 } else if (kind === KIND_EXIT) {
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
                 }
