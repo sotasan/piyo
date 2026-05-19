@@ -15,6 +15,7 @@
 ## Features
 
 - ⚡ GPU-accelerated rendering
+- 👻 Ghostty-powered terminal engine
 - 🖼️ Kitty graphics and keyboard protocols
 - 🔤 Full Unicode and emoji support
 - 🍎 Native macOS look and feel
