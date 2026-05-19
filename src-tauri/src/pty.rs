@@ -2,6 +2,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
@@ -59,7 +60,16 @@ pub struct PtySpawned {
 }
 
 enum SessionMsg {
-    Bytes(Vec<u8>),
+    Bytes {
+        data: Vec<u8>,
+        /// Monotonic counter assigned by the reader thread. The session
+        /// thread drops any chunk whose `seq` is below the interrupt
+        /// cutoff (set by `pty_write` when it sees a `\x03`), so a
+        /// Ctrl+C against a flooding command (e.g. `tree /`) discards
+        /// the pre-Ctrl+C backlog instead of crawling it across the
+        /// screen.
+        seq: u64,
+    },
     Resize {
         cols: u16,
         rows: u16,
@@ -76,6 +86,10 @@ pub struct PtyHandle {
     writer: vt::PtyWriter,
     child: ChildHandle,
     session_tx: Mutex<Sender<SessionMsg>>,
+    /// Next `seq` the reader will stamp on outgoing chunks.
+    reader_seq: Arc<AtomicU64>,
+    /// Cutoff: session thread drops `Bytes` whose `seq` <= this.
+    interrupt_seq: Arc<AtomicU64>,
 }
 
 impl tauri::Resource for PtyHandle {}
@@ -89,6 +103,14 @@ impl PtyHandle {
         let mut w = self.writer.lock().unwrap();
         w.write_all(data).context("failed to write to pty")?;
         w.flush().context("failed to flush pty")?;
+        // If the user just sent Ctrl+C, mark every chunk the reader has
+        // already enqueued (and the one it might be about to enqueue) as
+        // discardable. The session thread will skip forwarding them to
+        // JS, so the post-SIGINT drain doesn't crawl across the screen.
+        if data.contains(&0x03) {
+            let cutoff = self.reader_seq.load(Ordering::Relaxed);
+            self.interrupt_seq.store(cutoff, Ordering::Relaxed);
+        }
         Ok(())
     }
 
@@ -175,11 +197,18 @@ pub async fn pty_spawn(
     let (session_tx, session_rx) = std::sync::mpsc::channel::<SessionMsg>();
     let session_tx_for_reader = session_tx.clone();
 
+    let reader_seq = Arc::new(AtomicU64::new(0));
+    let interrupt_seq = Arc::new(AtomicU64::new(0));
+    let reader_seq_for_reader = reader_seq.clone();
+    let interrupt_seq_for_session = interrupt_seq.clone();
+
     let handle = PtyHandle {
         master: Mutex::new(pair.master),
         writer,
         child,
         session_tx: Mutex::new(session_tx),
+        reader_seq,
+        interrupt_seq,
     };
 
     let rid = app.resources_table().add(handle);
@@ -197,8 +226,12 @@ pub async fn pty_spawn(
                 Ok(n) => {
                     let chunk = &buf[..n];
                     parser.advance(&mut performer, chunk);
+                    let seq = reader_seq_for_reader.fetch_add(1, Ordering::Relaxed) + 1;
                     if session_tx_for_reader
-                        .send(SessionMsg::Bytes(chunk.to_vec()))
+                        .send(SessionMsg::Bytes {
+                            data: chunk.to_vec(),
+                            seq,
+                        })
                         .is_err()
                     {
                         break;
@@ -227,7 +260,14 @@ pub async fn pty_spawn(
         };
         while let Ok(msg) = session_rx.recv() {
             match msg {
-                SessionMsg::Bytes(chunk) => {
+                SessionMsg::Bytes { data: chunk, seq } => {
+                    // Drop chunks queued before the most recent Ctrl+C.
+                    // Ghostty doesn't see them either; on the next chunk
+                    // it'll mark everything dirty (Dirty::Full) and the
+                    // re-paint will catch up.
+                    if seq <= interrupt_seq_for_session.load(Ordering::Relaxed) {
+                        continue;
+                    }
                     if events_clone
                         .send(InvokeResponseBody::Raw(wire::bytes_event(&chunk)))
                         .is_err()

@@ -1,14 +1,3 @@
-# Kitty keyboard protocol set-mode (`=Nu`) instead of push/pop (`>Nu`/`<u`):
-# fish 4 rebuilds the line editor state across preexec/prompt and the stack
-# form ended up out of sync. Set-mode is idempotent and survives that.
-function _piyo_kitty_keyboard_on --on-event fish_preexec
-    printf '\e[=1u'
-end
-
-function _piyo_kitty_keyboard_off --on-event fish_prompt
-    printf '\e[=0u'
-end
-
 # Bar cursor + steady blink for line editing.
 function _piyo_cursor_bar --on-event fish_prompt
     printf '\e[5 q\e[?12l\e[?12h'

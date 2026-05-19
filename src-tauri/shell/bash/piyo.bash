@@ -10,16 +10,11 @@ unset _piyo_rc
 __piyo_cursor_bar() { printf '\e[5 q\e[?12l\e[?12h'; }
 # OSC 7: report cwd to the host so the sidebar/tab title can track it.
 __piyo_report_cwd() { printf '\e]7;file://%s%s\a' "$HOSTNAME" "$PWD"; }
-# Pop the kitty keyboard mode pushed in PS0. Readline doesn't want the
-# extended protocol — only the foregrounded child process does.
-__piyo_kitty_off() { printf '\e[<u'; }
 
-# precmd: drop kitty keyboard, switch to bar cursor, emit cwd.
-# PS0 (runs after Enter, before the command): block cursor + push kitty
-# keyboard mode 1 so TUI apps (Claude Code, helix, etc.) see Shift+Enter
-# and the rest of the disambiguated key encoding.
-PROMPT_COMMAND='__piyo_kitty_off; __piyo_cursor_bar; __piyo_report_cwd;'"${PROMPT_COMMAND-}"
-PS0='\e[2 q\e[>1u'"${PS0-}"
+# precmd: bar cursor + cwd. PS0 (after Enter, before the command):
+# block cursor for the duration of execution.
+PROMPT_COMMAND='__piyo_cursor_bar; __piyo_report_cwd;'"${PROMPT_COMMAND-}"
+PS0='\e[2 q'"${PS0-}"
 
 # Pin piyo's bundled helper bin to the front of PATH so it overrides
 # anything the user installed (idempotent: skip if already first).
