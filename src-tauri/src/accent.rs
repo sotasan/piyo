@@ -1,5 +1,3 @@
-pub const EVENT_ACCENT_CHANGED: &str = "accent:changed";
-
 #[cfg(target_os = "macos")]
 mod platform {
     use std::ptr::NonNull;
@@ -9,8 +7,7 @@ mod platform {
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSUserDefaults, ns_string};
     use tauri::{AppHandle, Emitter};
 
-    use super::EVENT_ACCENT_CHANGED;
-
+    const EVENT_ACCENT_CHANGED: &str = "accent:changed";
     const FALLBACK: &str = "transparent";
 
     pub fn read_accent_hex() -> String {
@@ -50,15 +47,12 @@ mod platform {
 
 #[cfg(not(target_os = "macos"))]
 mod platform {
-    use tauri::AppHandle;
-
     pub fn read_accent_hex() -> String {
         "transparent".into()
     }
-
-    pub fn install_observer(_app: AppHandle) {}
 }
 
+#[cfg(target_os = "macos")]
 pub use platform::install_observer;
 
 #[tauri::command]
