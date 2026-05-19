@@ -8,13 +8,12 @@ if "PIYO_BIN" in $env {
     }
 }
 
-# pre_prompt: pop kitty keyboard mode (readline doesn't want it), switch to
-# bar cursor with steady blink, and emit OSC 7 with a url-encoded cwd. The
-# OSC 7 spec wants percent-encoded paths; bash/zsh/fish punt on this, but
-# `url encode` is one builtin call in nu so we do it right.
+# pre_prompt: bar cursor with steady blink, and emit OSC 7 with a
+# url-encoded cwd. The OSC 7 spec wants percent-encoded paths;
+# bash/zsh/fish punt on this, but `url encode` is one builtin call
+# in nu so we do it right.
 $env.config.hooks.pre_prompt = (
     ($env.config.hooks.pre_prompt? | default [])
-    | append {|| print -n "\u{1b}[<u" }
     | append {|| print -n $"(ansi -e '[5 q')(ansi -e '[?12l')(ansi -e '[?12h')" }
     | append {||
         let cwd = ($env.PWD | url encode)
@@ -22,10 +21,8 @@ $env.config.hooks.pre_prompt = (
     }
 )
 
-# pre_execution: push kitty keyboard mode 1 (TUI apps want Shift+Enter etc.)
-# and switch to block cursor for the duration of the command.
+# pre_execution: block cursor for the duration of the command.
 $env.config.hooks.pre_execution = (
     ($env.config.hooks.pre_execution? | default [])
-    | append {|| print -n "\u{1b}[>1u" }
     | append {|| print -n "\u{1b}[2 q" }
 )
