@@ -4,9 +4,6 @@
  * underlying `DataView` carries the offset state.
  */
 
-export type Rgb = readonly [number, number, number];
-
-// Reuse one decoder; default-mode `decode()` is stateless across calls.
 const UTF8_DECODER = new TextDecoder();
 
 export class BinaryDecoder {
@@ -35,30 +32,9 @@ export class BinaryDecoder {
         return v;
     }
 
-    i32(): number {
-        const v = this.view.getInt32(this.offset, true);
-        this.offset += 4;
-        return v;
-    }
-
-    rgb(): Rgb {
-        const r = this.u8();
-        const g = this.u8();
-        const b = this.u8();
-        return [r, g, b];
-    }
-
-    bytes(len: number): Uint8Array {
-        const v = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, len);
-        this.offset += len;
-        return v;
-    }
-
     utf8(len: number): string {
-        return UTF8_DECODER.decode(this.bytes(len));
-    }
-
-    skip(len: number): void {
+        const slice = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, len);
         this.offset += len;
+        return UTF8_DECODER.decode(slice);
     }
 }

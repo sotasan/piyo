@@ -2985,7 +2985,6 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "percent-encoding",
- "png 0.17.16",
  "portable-pty",
  "serde",
  "serde_json",

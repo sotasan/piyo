@@ -85,6 +85,7 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                 )}
             >
                 <TabTitle
+                    rid={tab.id}
                     cwd={cwd}
                     title={tab.title}
                     className="pointer-events-none relative flex-1 justify-center"

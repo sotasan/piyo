@@ -1,12 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-import type {
-    AppearanceMode,
-    Configuration,
-    KeyInput,
-    MouseEventInput,
-    PtySpawned,
-} from "@/ipc/types";
+import type { AppearanceMode, Configuration, PtySpawned } from "@/ipc/types";
 
 export const getConfig = () => invoke<Configuration>("get_config");
 
@@ -35,9 +29,3 @@ export const ptyResize = (
 ) => invoke<void>("pty_resize", { rid, cols, rows, cellWidth, cellHeight });
 
 export const ptyClose = (rid: number) => invoke<void>("pty_close", { rid });
-
-export const ptySendKey = (rid: number, input: KeyInput) =>
-    invoke<void>("pty_send_key", { rid, input });
-
-export const ptySendMouse = (rid: number, input: MouseEventInput) =>
-    invoke<void>("pty_send_mouse", { rid, input });

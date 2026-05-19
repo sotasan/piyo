@@ -95,8 +95,8 @@ impl Perform for OscPerformer {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         let Some(&code) = params.first() else { return };
         match code {
-            // Title (OSC 0 / 2) is tracked by ghostty via Terminal::on_title_changed
-            // in crate::vt, so we don't double-emit it here.
+            // Title (OSC 0 / 2) is handled by xterm.js natively via
+            // term.onTitleChange, so we don't dispatch it here.
             b"7" => {
                 if let Some(uri) = join_payload(params, 1)
                     && let Some(path) = parse_file_uri(&uri)
