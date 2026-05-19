@@ -1,2 +1,8 @@
 #!/bin/sh
+# Codex's `notify` handler. Codex invokes this with one argument — a
+# JSON blob describing the event ("agent done", "agent paused for input",
+# etc.). We forward that payload verbatim inside an OSC 7496 escape
+# sequence written to /dev/tty (not stdout — codex may have redirected
+# our stdio). Piyo's OSC parser sees the sequence and lights up the
+# tab/spinner / fires a system notification accordingly.
 printf '\033]7496;codex;notify;%s\007' "${1-}" > /dev/tty 2>/dev/null
