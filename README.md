@@ -18,6 +18,7 @@
 - 👻 Ghostty-powered terminal engine
 - 🖼️ Kitty graphics and keyboard protocols
 - 🔤 Full Unicode and emoji support
+- ✒️ Font ligature support
 - 🍎 Native macOS look and feel
 - 🗂️ Tabbed terminal sessions
 - ✨ Claude Code and Codex CLI integration
