@@ -2,6 +2,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
+import { LigaturesAddon } from "@xterm/addon-ligatures";
 import { ProgressAddon } from "@xterm/addon-progress";
 import { SearchAddon } from "@xterm/addon-search";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
@@ -171,6 +172,11 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
             term.open(container);
             if (term.element) term.element.style.padding = config.terminal.padding;
+            try {
+                term.loadAddon(new LigaturesAddon());
+            } catch (e) {
+                console.warn("ligatures addon failed to load", e);
+            }
             try {
                 const webgl = new WebglAddon();
                 webgl.onContextLoss(() => webgl.dispose());
