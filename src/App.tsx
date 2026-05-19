@@ -116,16 +116,16 @@ function App() {
                         onClose={closeTab}
                         onReorder={reorder}
                     />
-                ) : (
+                ) : activeId !== null ? (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                         <TabTitle
-                            rid={activeId!}
+                            rid={activeId}
                             cwd={activeCwd}
                             title={activeTitle}
                             className="text-sm text-foreground"
                         />
                     </div>
-                )}
+                ) : null}
             </Titlebar>
             <CommandPalette />
         </div>

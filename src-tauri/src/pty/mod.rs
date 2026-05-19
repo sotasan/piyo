@@ -156,6 +156,7 @@ fn handle(app: &AppHandle, rid: u32) -> CommandResult<Arc<PtyHandle>> {
 
 fn reap(child: &ChildHandle) {
     if let Some(mut c) = child.lock().unwrap().take() {
+        let _ = c.kill();
         let _ = c.wait();
     }
 }
