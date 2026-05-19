@@ -1,13 +1,9 @@
-/**
- * Lifecycle hook for an xterm.js terminal bound to one PTY rid.
- *
- * Creates the [`XtermTerminal`], loads addons, attaches the kitty-graphics
- * overlay, wires input/mouse/wheel listeners, subscribes to ghostty mode
- * changes, and pumps binary frames from the tab channel. Everything tears
- * down on `rid` change or unmount.
- */
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
+import { ImageAddon } from "@xterm/addon-image";
+import { LigaturesAddon } from "@xterm/addon-ligatures";
+import { ProgressAddon } from "@xterm/addon-progress";
 import { SearchAddon } from "@xterm/addon-search";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebFontsAddon } from "@xterm/addon-web-fonts";
@@ -19,16 +15,8 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
 import { i18next } from "@/lib/i18n";
-import { onPtyModesChange } from "@/lib/ptyModes";
-import { applyFrame, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
-import {
-    attachGraphicsOverlay,
-    repaintOverlay,
-    type GraphicsOverlay,
-} from "@/lib/xtermGraphicsOverlay";
+import { applyFrame, KIND_BYTES, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
 import { handleKey } from "@/lib/xtermInput";
-import { getCellPx } from "@/lib/xtermInternals";
-import { handleMouse, handleWheel } from "@/lib/xtermMouse";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
 
@@ -40,6 +28,22 @@ function fontStack(family: string): string {
         .filter(Boolean)
         .map((f) => (f.includes(" ") ? `'${f}'` : f))
         .join(", ");
+}
+
+function getCellPx(term: XtermTerminal): { width: number; height: number } {
+    const cell = (
+        term as unknown as {
+            _core?: {
+                _renderService?: {
+                    dimensions?: { css?: { cell?: { width: number; height: number } } };
+                };
+            };
+        }
+    )._core?._renderService?.dimensions?.css?.cell;
+    return {
+        width: Math.max(1, Math.round(cell?.width ?? 0)),
+        height: Math.max(1, Math.round(cell?.height ?? 0)),
+    };
 }
 
 type UseXtermOptions = {
@@ -94,54 +98,61 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 scrollbar: { width: 8 },
                 allowProposedApi: true,
                 scrollback: SCROLLBACK_ROWS,
-                // Ghostty is the authoritative VT and repaints the visible
-                // grid on every resize. xterm's own reflow would wrap our
-                // already-rendered cells and dump the resulting interim rows
-                // into scrollback before ghostty's repaint arrives. Setting
-                // windowsPty.buildNumber to a non-conpty value flips xterm's
-                // internal _isReflowEnabled to false (Buffer.ts:317) — the
-                // documented escape hatch for hosts that own their own reflow.
+                vtExtensions: { kittyKeyboard: true },
+                // Ghostty owns reflow: on resize it repaints the visible grid
+                // and signals scrollback evictions explicitly. xterm.js's own
+                // reflow would wrap our already-rendered cells and dump the
+                // interim rows into scrollback before ghostty's repaint
+                // arrives. Setting windowsPty.buildNumber to a non-conpty
+                // value flips xterm's internal _isReflowEnabled to false
+                // (Buffer.ts) — the documented escape hatch for hosts that
+                // own their own reflow.
                 windowsPty: { buildNumber: 1 },
             });
             termRef.current = term;
+            // Debug hook: poke at the live Terminal instance from devtools
+            // via `__piyoTerm._core.buffer.lines.get(N)`, addon state,
+            // etc. Last writer wins when multiple tabs exist; that's fine
+            // for diagnosis.
+            (window as unknown as { __piyoTerm: typeof term }).__piyoTerm = term;
             cleanups.push(() => {
                 term.dispose();
                 termRef.current = null;
             });
 
             term.attachCustomKeyEventHandler((event) => {
-                if (event.type === "keydown" && event.metaKey && event.key === "k") {
-                    // Wipe xterm's scrollback then redraw the shell prompt
-                    // by sending Ctrl-L. Mirrors macOS Terminal / iTerm.
-                    term.clear();
-                    void ptyWrite(rid, "\x0c");
+                if (event.type === "keydown" && event.metaKey) {
+                    if (event.key === "k") {
+                        term.clear();
+                        void ptyWrite(rid, "\x0c");
+                        return false;
+                    }
+                    if (event.key === "f") {
+                        triggerSearch();
+                        return false;
+                    }
+                    // macOS Cmd+Arrow/Backspace/Delete readline shortcuts dispatch
+                    // here. Everything else with Cmd (Cmd+T new tab, Cmd+W close,
+                    // Cmd+V paste, etc.) we leave for the OS menu — returning false
+                    // skips xterm's encoding so it doesn't preventDefault.
+                    handleKey(rid, event);
                     return false;
                 }
-                if (event.type === "keydown" && event.metaKey && event.key === "f") {
-                    triggerSearch();
-                    return false;
-                }
-                const letXtermHandle = handleKey(rid, event);
-                if (!letXtermHandle) {
-                    // We routed this key through ghostty's encoder. xterm's
-                    // attachCustomKeyEventHandler returning false stops xterm
-                    // but doesn't suppress the browser default — so Tab would
-                    // still move focus off the terminal, Escape would close
-                    // the WebView's text-search UI, etc. Stop the browser too.
-                    event.preventDefault();
-                    if (event.type === "keydown") term.scrollToBottom();
-                }
-                return letXtermHandle;
+                return handleKey(rid, event);
             });
 
             const fit = new FitAddon();
             const webFonts = new WebFontsAddon();
             const search = new SearchAddon();
+            const clipboard = new ClipboardAddon();
+            const progress = new ProgressAddon();
             searchRef.current = search;
             for (const addon of [
                 fit,
                 webFonts,
                 search,
+                clipboard,
+                progress,
                 new UnicodeGraphemesAddon(),
                 new WebLinksAddon((event, uri) => {
                     event.preventDefault();
@@ -154,6 +165,16 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 searchRef.current = null;
             });
             term.unicode.activeVersion = "15-graphemes";
+
+            const progressSub = progress.onChange((state) => {
+                useTabsStore.getState().setProgress(rid, state);
+            });
+            cleanups.push(() => progressSub.dispose());
+
+            const titleSub = term.onTitleChange((title) => {
+                useTabsStore.getState().handleTitle(rid, title);
+            });
+            cleanups.push(() => titleSub.dispose());
 
             const ro = new ResizeObserver(() => {
                 setTimeout(() => {
@@ -171,87 +192,120 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             term.open(container);
             if (term.element) term.element.style.padding = config.terminal.padding;
             try {
-                term.loadAddon(new WebglAddon());
+                term.loadAddon(new LigaturesAddon());
+            } catch (e) {
+                console.warn("ligatures addon failed to load", e);
+            }
+            try {
+                const webgl = new WebglAddon();
+                webgl.onContextLoss(() => webgl.dispose());
+                term.loadAddon(webgl);
             } catch {}
+            try {
+                term.loadAddon(new ImageAddon());
+            } catch {}
+            // Work around an addon-image bug: `chafa --format=kitty` and `viu`
+            // close their chunked transmissions with `\e_Gm=0\e\\` — an APC
+            // chunk that carries the `m=0` final-chunk flag but no semicolon
+            // and no payload. addon-image's `_handleNoPayloadCommand` only
+            // handles delete / query / placement actions in that path; the
+            // default transmit case silently drops the close-out, leaving
+            // every preceding `m=1` chunk's data orphaned in
+            // `_pendingTransmissions`. Fake `end()` into the with-payload
+            // finalize path so it pulls from pending and renders. Smaller
+            // and easier to maintain than a bundle patch.
+            type KittyHandler = {
+                _aborted: boolean;
+                _inControlData: boolean;
+                _controlLength: number;
+                _controlData: Uint32Array;
+                _parsedCommand: { more?: number; action?: string; id?: number } | null;
+                _pendingTransmissions: Map<number, unknown>;
+                _lastPendingKey: number | undefined;
+                _parseControlDataString: () => string;
+                end: (success: boolean) => boolean | Promise<boolean>;
+            };
+            const apcHandlers = (
+                term as unknown as {
+                    _core: {
+                        _inputHandler: {
+                            _parser: { _apcParser: { _handlers: Record<string, KittyHandler[]> } };
+                        };
+                    };
+                }
+            )._core._inputHandler._parser._apcParser._handlers;
+            const kittyHandler = apcHandlers?.["71"]?.[0];
+            if (kittyHandler) {
+                const origEnd = kittyHandler.end.bind(kittyHandler);
+                kittyHandler.end = function (success: boolean) {
+                    if (success && !this._aborted && this._inControlData) {
+                        const ctrl = this._parseControlDataString();
+                        // The closing chunk we care about looks like `m=0` (with
+                        // optional `i=N`). If a pending transmission exists,
+                        // hand it off to the normal finalize path by clearing
+                        // _inControlData and seeding _parsedCommand.
+                        const more = /(?:^|,)m=(\d)/.exec(ctrl)?.[1];
+                        const action = /(?:^|,)a=(\w)/.exec(ctrl)?.[1] ?? "t";
+                        if (more === "0" && action === "t") {
+                            const idStr = /(?:^|,)i=(\d+)/.exec(ctrl)?.[1];
+                            const id = idStr ? Number(idStr) : undefined;
+                            const pendingKey = id ?? this._lastPendingKey ?? 0;
+                            if (this._pendingTransmissions.has(pendingKey)) {
+                                this._inControlData = false;
+                                this._parsedCommand = {
+                                    more: 0,
+                                    action: "t",
+                                    ...(id !== undefined ? { id } : {}),
+                                };
+                            }
+                        }
+                    }
+                    return origEnd(success);
+                };
+            }
             fit.fit();
             ro.observe(container);
-
-            const overlay: GraphicsOverlay | null = attachGraphicsOverlay(term);
-            if (overlay) {
-                const { canvas } = overlay;
-                const scrollSub = term.onScroll(() => repaintOverlay(term, overlay));
-                cleanups.push(() => {
-                    scrollSub.dispose();
-                    for (const p of overlay.placements.values()) p.marker.dispose();
-                    overlay.placements.clear();
-                    canvas.remove();
-                });
-            }
-
-            const mouseHandler = (e: MouseEvent) => {
-                handleMouse(rid, container, term.cols, term.rows, e);
-            };
-            // Capture-phase wheel handler: if the running app has mouse
-            // tracking on, we encode the wheel as a mouse button event and
-            // stop xterm's own wheel handling. Otherwise (no tracking),
-            // we let xterm scroll its native scrollback.
-            const wheelHandler = (e: WheelEvent) => {
-                if (handleWheel(rid, container, term.cols, term.rows, e)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            };
-            container.addEventListener("wheel", wheelHandler, {
-                passive: false,
-                capture: true,
-            });
-            container.addEventListener("mousedown", mouseHandler);
-            container.addEventListener("mouseup", mouseHandler);
-            container.addEventListener("mousemove", mouseHandler);
-            // Mirror ghostty's terminal modes into xterm + UI state.
-            //  - mouseTracking: swap OS pointer (I-beam ↔ arrow)
-            //  - bracketedPaste / focusEvent: propagate the DEC mode set
-            //    escape to xterm so its native handling (paste wrapping,
-            //    focus event emission) engages.
-            const unsubTracking = onPtyModesChange(rid, (m) => {
-                if (term.element) term.element.style.cursor = m.mouseTracking ? "default" : "";
-                term.write(m.bracketedPaste ? "\x1b[?2004h" : "\x1b[?2004l");
-                term.write(m.focusEvent ? "\x1b[?1004h" : "\x1b[?1004l");
-            });
-            cleanups.push(() => {
-                container.removeEventListener("wheel", wheelHandler, { capture: true });
-                container.removeEventListener("mousedown", mouseHandler);
-                container.removeEventListener("mouseup", mouseHandler);
-                container.removeEventListener("mousemove", mouseHandler);
-                unsubTracking();
-            });
 
             unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
                 if (ac.signal.aborted) return;
                 const kind = new DataView(event).getUint8(0);
-                if (kind === KIND_FRAME) {
-                    applyFrame(term, event, overlay);
+                if (kind === KIND_BYTES) {
+                    // Raw PTY bytes — feed xterm.js's parser so modes, OSC,
+                    // APC kitty graphics (addon-image), kitty keyboard,
+                    // title, and bell all keep working.
+                    term.write(new Uint8Array(event, 1));
+                } else if (kind === KIND_FRAME) {
+                    // term.write() queues parsing onto the next tick. If we
+                    // ran applyFrame synchronously here, line.getFg/getBg
+                    // would return stale attrs (xterm.js hasn't parsed the
+                    // chunk's SGR sequences yet) and moving the cursor to
+                    // ghostty's position would desync xterm.js's parser
+                    // — its later writes would land at the wrong cells.
+                    // Defer via the write callback so xterm.js drains
+                    // first, then ghostty overwrites codepoints in place.
+                    term.write("", () => applyFrame(term, event));
                 } else if (kind === KIND_EXIT) {
                     term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
                 }
             });
 
-            const cellSize = () => {
-                const { width, height } = getCellPx(term);
-                return { cellWidth: width, cellHeight: height };
-            };
             term.onData((data) => void ptyWrite(rid, data));
             term.onResize(({ cols, rows }) => {
-                const cell = cellSize();
-                void ptyResize(rid, cols, rows, cell.cellWidth, cell.cellHeight);
+                const cell = getCellPx(term);
+                void ptyResize(rid, cols, rows, cell.width, cell.height);
                 emitResize(cols, rows);
             });
 
-            const cell = cellSize();
-            void ptyResize(rid, term.cols, term.rows, cell.cellWidth, cell.cellHeight);
+            const initialCell = getCellPx(term);
+            void ptyResize(rid, term.cols, term.rows, initialCell.width, initialCell.height);
 
             focusIfActive(term);
-        })();
+        })().catch((e) => {
+            if (!ac.signal.aborted) {
+                console.error("xterm bootstrap failed", e);
+                container.textContent = i18next.t("terminal.processExited");
+            }
+        });
 
         return () => {
             ac.abort();

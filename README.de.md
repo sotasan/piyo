@@ -18,6 +18,7 @@
 - 👻 Ghostty-basierte Terminal-Engine
 - 🖼️ Kitty-Grafik- und Tastaturprotokoll
 - 🔤 Vollständige Unicode- und Emoji-Unterstützung
+- ✒️ Unterstützung für Schrift-Ligaturen
 - 🍎 Natives macOS-Erscheinungsbild
 - 🗂️ Terminal-Sitzungen in Tabs
 - ✨ Claude-Code- und Codex-CLI-Integration

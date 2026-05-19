@@ -1,9 +1,24 @@
 #!/bin/sh
+# Shim that wraps the real `claude` binary so piyo can:
+#   1. Drop the shim's own directory from PATH (otherwise the exec below
+#      would recurse into this script forever).
+#   2. Capture the controlling tty so claude's Stop hook can write its
+#      OSC 7496 notification straight to the terminal even when stdout
+#      is redirected.
+#   3. Push kitty keyboard mode 1 for the duration of claude — claude
+#      relies on the disambiguated encoding to see Shift+Enter as a
+#      distinct key. The shell init doesn't push it (would rewrite
+#      Ctrl+C as CSI-u and break SIGINT for cooked-mode commands like
+#      `tree`), so the shim does it itself and pops on every exit path.
 self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
 PIYO_TTY=$(tty 2>/dev/null) || PIYO_TTY=/dev/tty
 export PIYO_TTY
-exec claude --settings '{
+
+trap 'printf "\033[<u" > "$PIYO_TTY" 2>/dev/null' EXIT INT TERM HUP
+printf '\033[>1u' > "$PIYO_TTY" 2>/dev/null
+
+claude --settings '{
     "hooks": {
         "Stop": [{
             "hooks": [{
