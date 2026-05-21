@@ -1,5 +1,11 @@
 #[cfg(target_os = "macos")]
-include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
+#[allow(dead_code)]
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
+}
+
+#[cfg(target_os = "macos")]
+use bindings::*;
 
 #[cfg(target_os = "macos")]
 pub mod context_menu {
