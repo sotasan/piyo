@@ -1,5 +1,5 @@
 [env]
-_.file = ".env.{{ os() }}"
+_.file = [".env.{{ os() }}", ".env.local"]
 
 [tools]
 bun = "latest"
