@@ -22,7 +22,11 @@ async function popRemoveMenu(workspaceId: number, label: string) {
         action: () => useWorkspacesStore.getState().remove(workspaceId),
     });
     const menu = await Menu.new({ items: [item] });
-    await menu.popup();
+    try {
+        await menu.popup();
+    } finally {
+        await Promise.all([item.close(), menu.close()]);
+    }
 }
 
 function WorkspaceIcon({ workspace, isActive, onActivate }: Props) {
@@ -40,8 +44,8 @@ function WorkspaceIcon({ workspace, isActive, onActivate }: Props) {
                         aria-label={label}
                         onClick={() => onActivate(workspace.id)}
                         onContextMenu={(e) => {
-                            if (workspace.isHome) return;
                             e.preventDefault();
+                            if (workspace.isHome) return;
                             void popRemoveMenu(workspace.id, t("menu.removeWorkspace"));
                         }}
                         data-tauri-drag-region={false}
