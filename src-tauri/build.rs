@@ -15,6 +15,7 @@ fn main() {
             .file("src/macos/context_menu.m")
             .file("src/macos/refresh_rate.m")
             .file("src/macos/system_appearance.m")
+            .file("src/macos/quit_handler.m")
             .flag("-fobjc-arc")
             .compile("piyo_macos");
 
@@ -24,6 +25,7 @@ fn main() {
         println!("cargo:rerun-if-changed=src/macos/context_menu.m");
         println!("cargo:rerun-if-changed=src/macos/refresh_rate.m");
         println!("cargo:rerun-if-changed=src/macos/system_appearance.m");
+        println!("cargo:rerun-if-changed=src/macos/quit_handler.m");
     }
 
     tauri_build::build()
