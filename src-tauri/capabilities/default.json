@@ -8,6 +8,7 @@
         "core:menu:default",
         "core:window:allow-show",
         "core:window:allow-close",
+        "core:window:allow-destroy",
         "core:window:allow-start-dragging",
         "dialog:default",
         "notification:default",
