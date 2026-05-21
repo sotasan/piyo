@@ -110,11 +110,6 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 windowsPty: { buildNumber: 1 },
             });
             termRef.current = term;
-            // Debug hook: poke at the live Terminal instance from devtools
-            // via `__piyoTerm._core.buffer.lines.get(N)`, addon state,
-            // etc. Last writer wins when multiple tabs exist; that's fine
-            // for diagnosis.
-            (window as unknown as { __piyoTerm: typeof term }).__piyoTerm = term;
             cleanups.push(() => {
                 term.dispose();
                 termRef.current = null;
