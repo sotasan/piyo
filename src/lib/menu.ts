@@ -1,7 +1,9 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
+import { pickAndAddWorkspace } from "@/components/AddWorkspaceButton";
 import { i18next } from "@/lib/i18n";
 import { useTabsStore } from "@/stores/tabs";
+import { useWorkspacesStore } from "@/stores/workspaces";
 
 const t = (key: string, opts?: Record<string, unknown>) => i18next.t(`menu.${key}`, opts);
 
@@ -71,9 +73,17 @@ export async function installMenu(): Promise<() => void> {
             if (activeId !== null) close(activeId);
         },
     });
+    const addWorkspace = await MenuItem.new({
+        id: "add-workspace",
+        text: t("addWorkspace"),
+        accelerator: "CmdOrCtrl+O",
+        action: () => {
+            void pickAndAddWorkspace().catch((e) => console.error("add workspace failed", e));
+        },
+    });
     const fileMenu = await Submenu.new({
         text: t("file"),
-        items: [newTab, await sep(), closeTab],
+        items: [newTab, addWorkspace, await sep(), closeTab],
     });
 
     const fullscreen = await PredefinedMenuItem.new({ item: "Fullscreen" });
@@ -107,6 +117,22 @@ export async function installMenu(): Promise<() => void> {
             }),
         ),
     );
+    const showHomeWorkspace = await MenuItem.new({
+        id: "show-home-workspace",
+        text: t("showHomeWorkspace"),
+        accelerator: "Control+0",
+        action: () => useWorkspacesStore.getState().activateHome(),
+    });
+    const showWorkspaceItems = await Promise.all(
+        Array.from({ length: 9 }, (_, i) =>
+            MenuItem.new({
+                id: `show-workspace-${i + 1}`,
+                text: t("showWorkspace", { index: i + 1 }),
+                accelerator: `Control+${i + 1}`,
+                action: () => useWorkspacesStore.getState().activateAtIndex(i),
+            }),
+        ),
+    );
     const windowMenu = await Submenu.new({
         text: t("window"),
         items: [
@@ -119,6 +145,9 @@ export async function installMenu(): Promise<() => void> {
             nextTab,
             await sep(),
             ...showTabItems,
+            await sep(),
+            showHomeWorkspace,
+            ...showWorkspaceItems,
         ],
     });
 
@@ -135,22 +164,35 @@ export async function installMenu(): Promise<() => void> {
 
     const refresh = async () => {
         const { tabs, activeId } = useTabsStore.getState();
+        const { workspaces, activeId: activeWsId } = useWorkspacesStore.getState();
+        const visible = activeWsId === null ? [] : tabs.filter((t) => t.workspaceId === activeWsId);
         const hasActive = activeId !== null;
-        const has2Plus = tabs.length >= 2;
+        const has2PlusVisible = visible.length >= 2;
+        const userWorkspaces = workspaces.filter((w) => !w.isHome);
         await Promise.all([
             closeTab.setEnabled(hasActive),
-            prevTab.setEnabled(has2Plus),
-            nextTab.setEnabled(has2Plus),
-            ...showTabItems.map((item, i) => item.setEnabled(i < tabs.length)),
+            prevTab.setEnabled(has2PlusVisible),
+            nextTab.setEnabled(has2PlusVisible),
+            ...showTabItems.map((item, i) => item.setEnabled(i < visible.length)),
+            showHomeWorkspace.setEnabled(workspaces.some((w) => w.isHome)),
+            ...showWorkspaceItems.map((item, i) => item.setEnabled(i < userWorkspaces.length)),
         ]);
     };
     await refresh();
 
-    const unsub = useTabsStore.subscribe((state, prev) => {
+    const unsubTabs = useTabsStore.subscribe((state, prev) => {
         if (state.tabs !== prev.tabs || state.activeId !== prev.activeId) {
             refresh().catch((e) => console.error("menu refresh failed", e));
         }
     });
+    const unsubWorkspaces = useWorkspacesStore.subscribe((state, prev) => {
+        if (state.workspaces !== prev.workspaces || state.activeId !== prev.activeId) {
+            refresh().catch((e) => console.error("menu refresh failed", e));
+        }
+    });
 
-    return unsub;
+    return () => {
+        unsubTabs();
+        unsubWorkspaces();
+    };
 }
