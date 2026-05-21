@@ -1,7 +1,9 @@
 //! PTY ownership, IPC commands, and ghostty session orchestration.
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -21,6 +23,18 @@ pub const EVENT_PTY_CWD: &str = "pty:cwd";
 pub const EVENT_PTY_EXIT: &str = "pty:exit";
 
 const READ_BUF_SIZE: usize = 4096;
+
+/// Active PTY rids. Used by the quit handler to scan every live PTY
+/// for a non-shell foreground process. Insert in `pty_spawn`, remove
+/// in `pty_close` and when the session thread exits (child died
+/// naturally).
+static ACTIVE_PTYS: LazyLock<std::sync::Mutex<HashSet<u32>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashSet::new()));
+
+#[allow(dead_code)] // Consumed by the quit handler in a follow-up task.
+pub fn active_rids() -> Vec<u32> {
+    ACTIVE_PTYS.lock().unwrap().iter().copied().collect()
+}
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -85,6 +99,7 @@ pub struct PtyHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: vt::PtyWriter,
     child: ChildHandle,
+    shell_pid: u32,
     session_tx: Mutex<Sender<SessionMsg>>,
     /// Next `seq` the reader will stamp on outgoing chunks.
     reader_seq: Arc<AtomicU64>,
@@ -180,6 +195,8 @@ pub async fn pty_spawn(
         .context("failed to spawn shell")?;
     drop(pair.slave);
 
+    let shell_pid = child.process_id().unwrap_or(0);
+
     let mut reader = pair
         .master
         .try_clone_reader()
@@ -206,12 +223,14 @@ pub async fn pty_spawn(
         master: Mutex::new(pair.master),
         writer,
         child,
+        shell_pid,
         session_tx: Mutex::new(session_tx),
         reader_seq,
         interrupt_seq,
     };
 
     let rid = app.resources_table().add(handle);
+    ACTIVE_PTYS.lock().unwrap().insert(rid);
 
     // Reader thread: pulls bytes from the PTY, taps OSC dispatches, and
     // hands each chunk to the vt session for cell parsing and forwarding.
@@ -299,6 +318,7 @@ pub async fn pty_spawn(
                 SessionMsg::Shutdown => break,
             }
         }
+        ACTIVE_PTYS.lock().unwrap().remove(&rid);
         let _ = events_clone.send(InvokeResponseBody::Raw(wire::exit_event()));
         let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });
     });
@@ -336,6 +356,7 @@ pub fn pty_close(app: AppHandle, rid: u32) -> CommandResult<()> {
     h.shutdown();
     drop(h);
     let _ = app.resources_table().close(rid);
+    ACTIVE_PTYS.lock().unwrap().remove(&rid);
     Ok(())
 }
 
@@ -350,5 +371,59 @@ fn reap(child: &ChildHandle) {
     if let Some(mut c) = child.lock().unwrap().take() {
         let _ = c.kill();
         let _ = c.wait();
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForegroundProc {
+    pub name: String,
+}
+
+/// Return `Some(ForegroundProc)` if the PTY's foreground process group is
+/// owned by something other than the spawned shell; `None` otherwise (or
+/// on any error querying state).
+pub fn foreground_process_for(app: &AppHandle, rid: u32) -> Option<ForegroundProc> {
+    let handle = app.resources_table().get::<PtyHandle>(rid).ok()?;
+    let master = handle.master.lock().ok()?;
+    let pgid = master.process_group_leader()?;
+    if pgid <= 0 {
+        return None;
+    }
+    if handle.shell_pid == 0 {
+        return None;
+    }
+    if pgid as u32 == handle.shell_pid {
+        return None;
+    }
+    Some(ForegroundProc {
+        name: resolve_process_name(pgid),
+    })
+}
+
+fn resolve_process_name(pid: i32) -> String {
+    libproc::proc_pid::name(pid).unwrap_or_else(|_| format!("pid {pid}"))
+}
+
+#[tauri::command]
+pub fn pty_foreground_process(app: AppHandle, rid: u32) -> CommandResult<Option<ForegroundProc>> {
+    Ok(foreground_process_for(&app, rid))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_process_name;
+
+    #[test]
+    fn resolve_process_name_falls_back_for_invalid_pid() {
+        let name = resolve_process_name(2_147_483_647);
+        assert_eq!(name, "pid 2147483647");
+    }
+
+    #[test]
+    fn resolve_process_name_returns_name_for_self() {
+        let pid = std::process::id() as i32;
+        let name = resolve_process_name(pid);
+        assert_ne!(name, format!("pid {pid}"));
     }
 }

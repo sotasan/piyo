@@ -34,6 +34,7 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
+            pty::pty_foreground_process,
             config::get_config,
             theme::read_user_theme,
             accent::get_accent_color,
