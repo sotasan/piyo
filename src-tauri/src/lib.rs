@@ -75,6 +75,8 @@ pub fn run() {
                     .get_webview_window("main")
                     .expect("main window missing in tauri.conf.json");
                 macos::context_menu::install();
+                let _ = quit::APP_HANDLE.set(app.handle().clone());
+                quit::install();
                 apply_vibrancy(
                     &main,
                     NSVisualEffectMaterial::Sidebar,

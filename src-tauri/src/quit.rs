@@ -10,12 +10,10 @@ use std::sync::{OnceLock, RwLock};
 use serde::Deserialize;
 use tauri::AppHandle;
 
-// Consumed by the quit handler in a follow-up task.
-#[allow(dead_code)]
+use crate::pty;
+
 pub static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
-// Fields are consumed by the quit handler in a follow-up task.
-#[allow(dead_code)]
 #[derive(Deserialize, Clone, Debug)]
 pub struct QuitStrings {
     pub title: String,
@@ -24,13 +22,61 @@ pub struct QuitStrings {
     pub cancel: String,
 }
 
-// Consumed by the quit handler in a follow-up task.
-#[allow(dead_code)]
 pub static QUIT_STRINGS: RwLock<Option<QuitStrings>> = RwLock::new(None);
 
 #[tauri::command]
 pub fn set_quit_dialog_strings(strings: QuitStrings) {
     *QUIT_STRINGS.write().unwrap() = Some(strings);
+}
+
+/// True iff any active PTY has a non-shell foreground process.
+fn any_tab_busy(app: &AppHandle) -> bool {
+    pty::active_rids()
+        .into_iter()
+        .any(|rid| pty::foreground_process_for(app, rid).is_some())
+}
+
+/// Show the parentless native quit dialog. Blocks the calling thread
+/// (must be the main thread on macOS — `applicationShouldTerminate:`
+/// is). Returns `true` if the user clicked the OK (Quit) button.
+///
+/// Returns `true` (allow quit silently) if JS hasn't pushed strings
+/// yet — the only path to this branch is a Cmd+Q via system menu bar
+/// before the main window has shown, where a silent quit is fine.
+fn show_quit_dialog() -> bool {
+    let Some(strings) = QUIT_STRINGS.read().unwrap().clone() else {
+        return true;
+    };
+    matches!(
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title(&strings.title)
+            .set_description(&strings.body)
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                strings.ok.clone(),
+                strings.cancel.clone(),
+            ))
+            .show(),
+        rfd::MessageDialogResult::Ok
+    )
+}
+
+extern "C" fn should_terminate() -> bool {
+    let Some(app) = APP_HANDLE.get() else {
+        // Defensive: APP_HANDLE not initialized yet means lib.rs setup
+        // hasn't completed — don't block quit.
+        return true;
+    };
+    if !any_tab_busy(app) {
+        return true;
+    }
+    show_quit_dialog()
+}
+
+pub fn install() {
+    unsafe {
+        crate::macos::piyo_install_quit_handler(Some(should_terminate));
+    }
 }
 
 #[cfg(test)]
