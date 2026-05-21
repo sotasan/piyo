@@ -69,7 +69,10 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     },
 
     close: async (rid) => {
-        const fg = await ptyForegroundProcess(rid);
+        // If the probe rejects the rid is likely already gone (raced
+        // with handleExit); treat as "no foreground" and let the close
+        // proceed as a no-op.
+        const fg = await ptyForegroundProcess(rid).catch(() => null);
         if (fg) {
             const ok = await ask(i18next.t("dialogs.closeTab.body", { name: fg.name }), {
                 title: i18next.t("dialogs.closeTab.title"),
