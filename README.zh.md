@@ -19,7 +19,7 @@
 - 🖼️ Kitty 图形与键盘协议
 - 🔤 完整的 Unicode 与表情符号支持
 - ✒️ 字体连字支持
-- 🍎 原生 macOS 外观与体验
+- 🍎 原生 macOS 集成
 - 🗂️ 标签式终端会话
 - ✨ Claude Code 和 Codex CLI 集成
 - 🐚 支持 Bash、Zsh、Fish 和 Nushell

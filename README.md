@@ -19,7 +19,7 @@
 - 🖼️ Kitty graphics and keyboard protocols
 - 🔤 Full Unicode and emoji support
 - ✒️ Font ligature support
-- 🍎 Native macOS look and feel
+- 🍎 Native macOS integration
 - 🗂️ Tabbed terminal sessions
 - ✨ Claude Code and Codex CLI integration
 - 🐚 Bash, Zsh, Fish and Nushell integration

@@ -19,7 +19,7 @@
 - 🖼️ Kitty グラフィックス＆キーボードプロトコル
 - 🔤 Unicode と絵文字の完全サポート
 - ✒️ フォントリガチャのサポート
-- 🍎 ネイティブな macOS の見た目と操作感
+- 🍎 ネイティブな macOS との統合
 - 🗂️ タブ式ターミナルセッション
 - ✨ Claude Code および Codex CLI 連携
 - 🐚 Bash、Zsh、Fish、Nushell に対応

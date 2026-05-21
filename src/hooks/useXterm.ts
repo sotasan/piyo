@@ -14,11 +14,19 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
+import { onPtyPassword } from "@/ipc/events";
 import { i18next } from "@/lib/i18n";
 import { applyFrame, KIND_BYTES, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
 import { handleKey } from "@/lib/xtermInput";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
+
+// SVG glyph drawn at the cursor cell when the PTY enters password mode.
+// Mirrors Ghostty's `.lock` cursor (src/renderer/cursor.zig). 16x16
+// viewBox so the SVG scales to whatever the current cell size is.
+const LOCK_SVG = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:100%;fill:currentColor">
+  <path d="M5 7V5a3 3 0 1 1 6 0v2h.5A1.5 1.5 0 0 1 13 8.5v4A1.5 1.5 0 0 1 11.5 14h-7A1.5 1.5 0 0 1 3 12.5v-4A1.5 1.5 0 0 1 4.5 7H5Zm1 0h4V5a2 2 0 1 0-4 0v2Z"/>
+</svg>`;
 
 const FALLBACK_FONTS = ["JetBrains Mono Variable", "ui-monospace", "monospace"];
 const SCROLLBACK_ROWS = 5000;
@@ -186,6 +194,72 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
             term.open(container);
             if (term.element) term.element.style.padding = config.terminal.padding;
+
+            // Password-mode lock overlay. The Rust side polls the master
+            // termios and emits `pty:password` { rid, active } whenever
+            // ICANON&&!ECHO flips — Ghostty's heuristic for "a password
+            // prompt is reading from us". When active we paint a lock
+            // glyph at the cursor cell (replicating Ghostty's
+            // `.lock` cursor) and hide xterm's own cursor underneath so
+            // the lock isn't competing with a blinking bar.
+            const lockEl = document.createElement("div");
+            lockEl.setAttribute("aria-hidden", "true");
+            lockEl.style.position = "absolute";
+            lockEl.style.pointerEvents = "none";
+            lockEl.style.display = "none";
+            lockEl.style.zIndex = "20";
+            lockEl.innerHTML = LOCK_SVG;
+            if (term.element) term.element.appendChild(lockEl);
+            cleanups.push(() => lockEl.remove());
+
+            let passwordActive = false;
+            const savedCursorStyle = term.options.cursorStyle;
+            const savedCursorInactiveStyle = term.options.cursorInactiveStyle;
+            const positionLock = () => {
+                if (!term.element) return;
+                const buf = term.buffer.active;
+                const screenRow = buf.baseY + buf.cursorY - buf.viewportY;
+                if (screenRow < 0 || screenRow >= term.rows) {
+                    lockEl.style.visibility = "hidden";
+                    return;
+                }
+                const cell = getCellPx(term);
+                const cs = getComputedStyle(term.element);
+                const padTop = parseFloat(cs.paddingTop) || 0;
+                const padLeft = parseFloat(cs.paddingLeft) || 0;
+                lockEl.style.visibility = "visible";
+                lockEl.style.left = `${padLeft + buf.cursorX * cell.width}px`;
+                lockEl.style.top = `${padTop + screenRow * cell.height}px`;
+                lockEl.style.width = `${cell.width}px`;
+                lockEl.style.height = `${cell.height}px`;
+                // Tint matches the theme's cursor color so the lock reads
+                // as "this is your cursor, but locked", not as decoration.
+                lockEl.style.color = term.options.theme?.cursor ?? "#ffd166";
+            };
+            const applyPasswordState = () => {
+                lockEl.style.display = passwordActive ? "block" : "none";
+                // Hide xterm's own cursor under the lock — otherwise a
+                // blinking bar pokes through the lock glyph's center.
+                // Underline (thin line) is the least visible style; we
+                // restore the user's original on exit.
+                term.options.cursorStyle = passwordActive ? "underline" : savedCursorStyle;
+                term.options.cursorInactiveStyle = passwordActive
+                    ? "none"
+                    : savedCursorInactiveStyle;
+                if (passwordActive) positionLock();
+            };
+            const renderSub = term.onRender(() => {
+                if (passwordActive) positionLock();
+            });
+            cleanups.push(() => renderSub.dispose());
+            const pwdUnlistenPromise = onPtyPassword(({ rid: r, active }) => {
+                if (r !== rid) return;
+                passwordActive = active;
+                applyPasswordState();
+            });
+            cleanups.push(() => {
+                void pwdUnlistenPromise.then((u) => u());
+            });
             try {
                 term.loadAddon(new LigaturesAddon());
             } catch (e) {
