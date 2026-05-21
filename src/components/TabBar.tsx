@@ -72,6 +72,12 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
             <button
                 type="button"
                 onClick={() => onActivate(tab.id)}
+                onAuxClick={(e) => {
+                    if (e.button === 1) {
+                        e.preventDefault();
+                        onClose(tab.id);
+                    }
+                }}
                 {...attributes}
                 {...listeners}
                 className={cn(
