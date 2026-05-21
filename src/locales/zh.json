@@ -21,6 +21,11 @@
         "processExited": "[进程已退出]",
         "searchPlaceholder": "搜索回滚缓冲区…"
     },
+    "workspaces": {
+        "homeLabel": "主工作区",
+        "workspaceLabel": "工作区 {{path}}",
+        "addLabel": "添加工作区"
+    },
     "menu": {
         "file": "文件",
         "edit": "编辑",
@@ -35,6 +40,10 @@
         "closeTab": "关闭标签页",
         "selectPrevTab": "选择上一个标签页",
         "selectNextTab": "选择下一个标签页",
-        "showTab": "显示标签页 {{index}}"
+        "showTab": "显示标签页 {{index}}",
+        "addWorkspace": "添加工作区…",
+        "removeWorkspace": "移除工作区",
+        "showHomeWorkspace": "显示主工作区",
+        "showWorkspace": "显示工作区 {{index}}"
     }
 }
