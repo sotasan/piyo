@@ -204,65 +204,6 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             try {
                 term.loadAddon(new ImageAddon());
             } catch {}
-            // Work around an addon-image bug: `chafa --format=kitty` and `viu`
-            // close their chunked transmissions with `\e_Gm=0\e\\` — an APC
-            // chunk that carries the `m=0` final-chunk flag but no semicolon
-            // and no payload. addon-image's `_handleNoPayloadCommand` only
-            // handles delete / query / placement actions in that path; the
-            // default transmit case silently drops the close-out, leaving
-            // every preceding `m=1` chunk's data orphaned in
-            // `_pendingTransmissions`. Fake `end()` into the with-payload
-            // finalize path so it pulls from pending and renders. Smaller
-            // and easier to maintain than a bundle patch.
-            type KittyHandler = {
-                _aborted: boolean;
-                _inControlData: boolean;
-                _controlLength: number;
-                _controlData: Uint32Array;
-                _parsedCommand: { more?: number; action?: string; id?: number } | null;
-                _pendingTransmissions: Map<number, unknown>;
-                _lastPendingKey: number | undefined;
-                _parseControlDataString: () => string;
-                end: (success: boolean) => boolean | Promise<boolean>;
-            };
-            const apcHandlers = (
-                term as unknown as {
-                    _core: {
-                        _inputHandler: {
-                            _parser: { _apcParser: { _handlers: Record<string, KittyHandler[]> } };
-                        };
-                    };
-                }
-            )._core._inputHandler._parser._apcParser._handlers;
-            const kittyHandler = apcHandlers?.["71"]?.[0];
-            if (kittyHandler) {
-                const origEnd = kittyHandler.end.bind(kittyHandler);
-                kittyHandler.end = function (success: boolean) {
-                    if (success && !this._aborted && this._inControlData) {
-                        const ctrl = this._parseControlDataString();
-                        // The closing chunk we care about looks like `m=0` (with
-                        // optional `i=N`). If a pending transmission exists,
-                        // hand it off to the normal finalize path by clearing
-                        // _inControlData and seeding _parsedCommand.
-                        const more = /(?:^|,)m=(\d)/.exec(ctrl)?.[1];
-                        const action = /(?:^|,)a=(\w)/.exec(ctrl)?.[1] ?? "t";
-                        if (more === "0" && action === "t") {
-                            const idStr = /(?:^|,)i=(\d+)/.exec(ctrl)?.[1];
-                            const id = idStr ? Number(idStr) : undefined;
-                            const pendingKey = id ?? this._lastPendingKey ?? 0;
-                            if (this._pendingTransmissions.has(pendingKey)) {
-                                this._inControlData = false;
-                                this._parsedCommand = {
-                                    more: 0,
-                                    action: "t",
-                                    ...(id !== undefined ? { id } : {}),
-                                };
-                            }
-                        }
-                    }
-                    return origEnd(success);
-                };
-            }
             fit.fit();
             ro.observe(container);
 
