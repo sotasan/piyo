@@ -19,7 +19,7 @@
 - 🖼️ Kitty-Grafik- und Tastaturprotokoll
 - 🔤 Vollständige Unicode- und Emoji-Unterstützung
 - ✒️ Unterstützung für Schrift-Ligaturen
-- 🍎 Natives macOS-Erscheinungsbild
+- 🍎 Native macOS-Integration
 - 🗂️ Terminal-Sitzungen in Tabs
 - ✨ Claude-Code- und Codex-CLI-Integration
 - 🐚 Bash-, Zsh-, Fish- und Nushell-Integration

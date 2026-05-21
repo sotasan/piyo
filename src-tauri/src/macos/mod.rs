@@ -2,6 +2,9 @@
 include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
 
 #[cfg(target_os = "macos")]
+pub mod secure_input;
+
+#[cfg(target_os = "macos")]
 pub mod context_menu {
     pub fn install() {
         unsafe { super::piyo_install_context_menu() }

@@ -2,9 +2,10 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use portable_pty::{MasterPty, PtySize, native_pty_system};
@@ -19,8 +20,10 @@ use crate::wire;
 
 pub const EVENT_PTY_CWD: &str = "pty:cwd";
 pub const EVENT_PTY_EXIT: &str = "pty:exit";
+pub const EVENT_PTY_PASSWORD: &str = "pty:password";
 
 const READ_BUF_SIZE: usize = 4096;
+const TERMIOS_POLL_MS: u64 = 200;
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -50,6 +53,13 @@ pub struct PtyCwd {
 #[serde(rename_all = "camelCase")]
 struct PtyExit {
     rid: u32,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PtyPassword {
+    rid: u32,
+    active: bool,
 }
 
 #[derive(Serialize)]
@@ -90,6 +100,8 @@ pub struct PtyHandle {
     reader_seq: Arc<AtomicU64>,
     /// Cutoff: session thread drops `Bytes` whose `seq` <= this.
     interrupt_seq: Arc<AtomicU64>,
+    /// Signals the termios poller to exit on the next tick.
+    password_poller_shutdown: Arc<AtomicBool>,
 }
 
 impl tauri::Resource for PtyHandle {}
@@ -138,6 +150,7 @@ impl PtyHandle {
         if let Some(child) = self.child.lock().unwrap().as_mut() {
             let _ = child.kill();
         }
+        self.password_poller_shutdown.store(true, Ordering::Relaxed);
         self.send(SessionMsg::Shutdown);
     }
 }
@@ -188,6 +201,14 @@ pub async fn pty_spawn(
         .master
         .take_writer()
         .context("failed to take pty writer")?;
+    // Snapshot the fd up front so the termios poller doesn't have to lock
+    // the master Mutex on every tick (which would contend with reads and
+    // resizes). Ghostty does the same: polls tcgetattr on the master fd
+    // out-of-band of the read loop. `as_raw_fd` returns None only for
+    // backends that don't own a real fd (e.g. ConPTY on Windows); on
+    // unix the native pty always has one.
+    #[cfg(unix)]
+    let master_fd: Option<std::os::fd::RawFd> = pair.master.as_raw_fd();
 
     let child: ChildHandle = Arc::new(Mutex::new(Some(child)));
     let child_for_reader = child.clone();
@@ -201,6 +222,9 @@ pub async fn pty_spawn(
     let interrupt_seq = Arc::new(AtomicU64::new(0));
     let reader_seq_for_reader = reader_seq.clone();
     let interrupt_seq_for_session = interrupt_seq.clone();
+    let password_poller_shutdown = Arc::new(AtomicBool::new(false));
+    #[cfg(unix)]
+    let password_poller_shutdown_for_task = password_poller_shutdown.clone();
 
     let handle = PtyHandle {
         master: Mutex::new(pair.master),
@@ -209,9 +233,66 @@ pub async fn pty_spawn(
         session_tx: Mutex::new(session_tx),
         reader_seq,
         interrupt_seq,
+        password_poller_shutdown,
     };
 
     let rid = app.resources_table().add(handle);
+
+    // Password-prompt detector. Ghostty's heuristic: a PTY in canonical
+    // mode with echo disabled is almost certainly being read by a
+    // password prompt (`sudo`, `ssh`, `passwd`, `gpg`, ...). We poll the
+    // master fd's termios every 200ms and emit edges to JS; on macOS we
+    // also flip Carbon's process-wide SecureEventInput so other apps'
+    // event taps can't observe the keystrokes while a password is being
+    // typed. See src-tauri/src/macos/secure_input.rs.
+    #[cfg(unix)]
+    if let Some(master_fd) = master_fd {
+        let app_for_poller = app.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut current = false;
+            loop {
+                std::thread::sleep(Duration::from_millis(TERMIOS_POLL_MS));
+                if password_poller_shutdown_for_task.load(Ordering::Relaxed) {
+                    break;
+                }
+                let mut t: libc::termios = unsafe { std::mem::zeroed() };
+                if unsafe { libc::tcgetattr(master_fd, &mut t) } != 0 {
+                    // EBADF: the master fd was closed (handle dropped). Stop
+                    // polling; the shutdown path will have already released
+                    // SecureEventInput if we were holding it.
+                    break;
+                }
+                let icanon = (t.c_lflag & libc::ICANON) != 0;
+                let echo = (t.c_lflag & libc::ECHO) != 0;
+                let detected = icanon && !echo;
+                if detected != current {
+                    current = detected;
+                    #[cfg(target_os = "macos")]
+                    {
+                        if detected {
+                            crate::macos::secure_input::acquire();
+                        } else {
+                            crate::macos::secure_input::release();
+                        }
+                    }
+                    let _ = app_for_poller.emit(
+                        EVENT_PTY_PASSWORD,
+                        PtyPassword {
+                            rid,
+                            active: detected,
+                        },
+                    );
+                }
+            }
+            // If we exit while holding SecureEventInput (handle dropped or
+            // child crashed mid-prompt), release it so the menu-bar lock
+            // doesn't get stuck on.
+            if current {
+                #[cfg(target_os = "macos")]
+                crate::macos::secure_input::release();
+            }
+        });
+    }
 
     // Reader thread: pulls bytes from the PTY, taps OSC dispatches, and
     // hands each chunk to the vt session for cell parsing and forwarding.

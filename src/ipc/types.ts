@@ -36,3 +36,9 @@ export type PtyCwd = {
 export type PtyExit = {
     rid: number;
 };
+
+/** mirrors `crate::pty::PtyPassword` */
+export type PtyPassword = {
+    rid: number;
+    active: boolean;
+};
