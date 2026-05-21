@@ -7,13 +7,13 @@ type Props = {
     onClick: () => void;
 };
 
-function SidebarToggle({ collapsed, onClick }: Props) {
+function FileTreeToggle({ collapsed, onClick }: Props) {
     const { t } = useTranslation();
-    const icon = collapsed ? "icon-[lucide--panel-left]" : "icon-[lucide--panel-left-close]";
+    const icon = collapsed ? "icon-[lucide--folder]" : "icon-[lucide--folder-open]";
     return (
         <button
             type="button"
-            aria-label={t(collapsed ? "sidebar.open" : "sidebar.close")}
+            aria-label={t(collapsed ? "fileTree.open" : "fileTree.close")}
             onClick={onClick}
             tabIndex={-1}
             data-tauri-drag-region={false}
@@ -24,4 +24,4 @@ function SidebarToggle({ collapsed, onClick }: Props) {
     );
 }
 
-export default SidebarToggle;
+export default FileTreeToggle;

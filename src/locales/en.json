@@ -7,9 +7,9 @@
         "empty": "No results.",
         "reloadTheme": "Reload Theme"
     },
-    "sidebar": {
-        "open": "Open sidebar",
-        "close": "Close sidebar"
+    "fileTree": {
+        "open": "Open file tree",
+        "close": "Close file tree"
     },
     "updates": {
         "title": "Update available",
@@ -20,6 +20,11 @@
     "terminal": {
         "processExited": "[process exited]",
         "searchPlaceholder": "Search scrollback…"
+    },
+    "workspaces": {
+        "homeLabel": "Home workspace",
+        "workspaceLabel": "Workspace {{path}}",
+        "addLabel": "Add workspace"
     },
     "menu": {
         "file": "File",
@@ -35,6 +40,10 @@
         "closeTab": "Close Tab",
         "selectPrevTab": "Select Previous Tab",
         "selectNextTab": "Select Next Tab",
-        "showTab": "Show Tab {{index}}"
+        "showTab": "Show Tab {{index}}",
+        "addWorkspace": "Add Workspace…",
+        "removeWorkspace": "Remove Workspace",
+        "showHomeWorkspace": "Show Home Workspace",
+        "showWorkspace": "Show Workspace {{index}}"
     }
 }

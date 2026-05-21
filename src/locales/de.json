@@ -7,9 +7,9 @@
         "empty": "Keine Ergebnisse.",
         "reloadTheme": "Theme neu laden"
     },
-    "sidebar": {
-        "open": "Seitenleiste öffnen",
-        "close": "Seitenleiste schließen"
+    "fileTree": {
+        "open": "Dateibaum öffnen",
+        "close": "Dateibaum schließen"
     },
     "updates": {
         "title": "Update verfügbar",
@@ -20,6 +20,11 @@
     "terminal": {
         "processExited": "[Prozess beendet]",
         "searchPlaceholder": "Verlauf durchsuchen…"
+    },
+    "workspaces": {
+        "homeLabel": "Home-Arbeitsbereich",
+        "workspaceLabel": "Arbeitsbereich {{path}}",
+        "addLabel": "Arbeitsbereich hinzufügen"
     },
     "menu": {
         "file": "Datei",
@@ -35,6 +40,10 @@
         "closeTab": "Tab schließen",
         "selectPrevTab": "Vorherigen Tab auswählen",
         "selectNextTab": "Nächsten Tab auswählen",
-        "showTab": "Tab {{index}} anzeigen"
+        "showTab": "Tab {{index}} anzeigen",
+        "addWorkspace": "Arbeitsbereich hinzufügen…",
+        "removeWorkspace": "Arbeitsbereich entfernen",
+        "showHomeWorkspace": "Home-Arbeitsbereich anzeigen",
+        "showWorkspace": "Arbeitsbereich {{index}} anzeigen"
     }
 }

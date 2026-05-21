@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit } from "@/ipc/events";
+import { useWorkspacesStore } from "@/stores/workspaces";
 
 /** Raw bytes forwarded from the PTY reader thread. */
 export type PtyEvent = ArrayBuffer;
@@ -12,6 +13,7 @@ export type PtyEvent = ArrayBuffer;
 export type Tab = {
     id: number;
     title: string;
+    workspaceId: number;
 };
 
 const tabChannels = new Map<number, Channel<ArrayBuffer>>();
@@ -24,10 +26,10 @@ interface TabsStore {
     dims: { cols: number; rows: number };
     progress: Map<number, IProgressState>;
 
-    spawn: (cwd: string | null) => Promise<number>;
+    spawn: (cwd: string | null, workspaceId: number) => Promise<number>;
     spawnSibling: () => Promise<number>;
     close: (rid: number) => void;
-    reorder: (oldIndex: number, newIndex: number) => void;
+    reorder: (activeId: number, overId: number) => void;
     activate: (rid: number) => void;
     selectPrev: () => void;
     selectNext: () => void;
@@ -48,30 +50,40 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     dims: { cols: 80, rows: 24 },
     progress: new Map(),
 
-    spawn: async (cwd) => {
+    spawn: async (cwd, workspaceId) => {
         const channel = new Channel<ArrayBuffer>();
         const { cols, rows } = get().dims;
         const { rid, shell } = await ptySpawn(channel, cols, rows, cwd);
         channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
         tabChannels.set(rid, channel);
         set((s) => ({
-            tabs: [...s.tabs, { id: rid, title: shell }],
+            tabs: [...s.tabs, { id: rid, title: shell, workspaceId }],
             activeId: rid,
         }));
         return rid;
     },
 
-    spawnSibling: () => {
-        const { activeId, cwds, spawn } = get();
-        return spawn(activeId !== null ? (cwds.get(activeId) ?? null) : null);
+    spawnSibling: async () => {
+        const { activeId, cwds, tabs, spawn } = get();
+        if (activeId === null) {
+            throw new Error("spawnSibling called with no active tab");
+        }
+        const active = tabs.find((t) => t.id === activeId);
+        if (!active) {
+            throw new Error("spawnSibling: active tab missing from tabs");
+        }
+        return spawn(cwds.get(activeId) ?? null, active.workspaceId);
     },
 
     close: (rid) => {
         void ptyClose(rid);
     },
 
-    reorder: (oldIndex, newIndex) =>
+    reorder: (activeId, overId) =>
         set((s) => {
+            const oldIndex = s.tabs.findIndex((t) => t.id === activeId);
+            const newIndex = s.tabs.findIndex((t) => t.id === overId);
+            if (oldIndex < 0 || newIndex < 0) return s;
             const tabs = [...s.tabs];
             const [moved] = tabs.splice(oldIndex, 1);
             tabs.splice(newIndex, 0, moved);
@@ -81,22 +93,33 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     activate: (rid) => set({ activeId: rid }),
 
     selectPrev: () => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs, activeId } = get();
-        if (tabs.length < 2 || activeId === null) return;
-        const idx = tabs.findIndex((t) => t.id === activeId);
-        set({ activeId: tabs[(idx - 1 + tabs.length) % tabs.length].id });
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        if (visible.length < 2 || activeId === null) return;
+        const idx = visible.findIndex((t) => t.id === activeId);
+        if (idx < 0) return;
+        set({ activeId: visible[(idx - 1 + visible.length) % visible.length].id });
     },
 
     selectNext: () => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs, activeId } = get();
-        if (tabs.length < 2 || activeId === null) return;
-        const idx = tabs.findIndex((t) => t.id === activeId);
-        set({ activeId: tabs[(idx + 1) % tabs.length].id });
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        if (visible.length < 2 || activeId === null) return;
+        const idx = visible.findIndex((t) => t.id === activeId);
+        if (idx < 0) return;
+        set({ activeId: visible[(idx + 1) % visible.length].id });
     },
 
     showAtIndex: (index) => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs } = get();
-        const t = tabs[Math.min(index, tabs.length - 1)];
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        const t = visible[Math.min(index, visible.length - 1)];
         if (t) set({ activeId: t.id });
     },
 
@@ -138,9 +161,36 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             const progress = new Map(s.progress);
             progress.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
+            const nextActiveId = pickNextActive(rid, s.tabs, next, s.activeId);
+
+            // If the active workspace just lost all its tabs, queue a replacement
+            // spawn at the workspace's path so the terminal area is never empty.
+            const closing = s.tabs.find((t) => t.id === rid);
+            const wsState = useWorkspacesStore.getState();
+            const activeWsId = wsState.activeId;
+            if (
+                closing &&
+                activeWsId !== null &&
+                closing.workspaceId === activeWsId &&
+                !next.some((t) => t.workspaceId === activeWsId)
+            ) {
+                const ws = wsState.workspaces.find((w) => w.id === activeWsId);
+                if (ws) {
+                    queueMicrotask(() => {
+                        void useTabsStore
+                            .getState()
+                            .spawn(ws.path, ws.id)
+                            .then((newRid) =>
+                                useWorkspacesStore.getState().setActiveTabFor(ws.id, newRid),
+                            )
+                            .catch((e) => console.error("auto-spawn on empty workspace failed", e));
+                    });
+                }
+            }
+
             return {
                 tabs: next,
-                activeId: pickNextActive(rid, s.tabs, next, s.activeId),
+                activeId: nextActiveId,
                 cwds,
                 progress,
             };
@@ -154,8 +204,21 @@ function pickNextActive(
     currentActiveId: number | null,
 ): number | null {
     if (currentActiveId !== closingRid) return currentActiveId;
-    const closingIdx = prevTabs.findIndex((t) => t.id === closingRid);
-    return prevTabs[closingIdx + 1]?.id ?? nextTabs[nextTabs.length - 1]?.id ?? null;
+    const closing = prevTabs.find((t) => t.id === closingRid);
+    if (!closing) return nextTabs[nextTabs.length - 1]?.id ?? null;
+
+    const sameWs = nextTabs.filter((t) => t.workspaceId === closing.workspaceId);
+    if (sameWs.length === 0) return null;
+
+    // Prefer the tab originally to the right of the closing tab within the same workspace.
+    const prevSameWs = prevTabs.filter((t) => t.workspaceId === closing.workspaceId);
+    const closingIdx = prevSameWs.findIndex((t) => t.id === closingRid);
+    const rightNeighbour = prevSameWs[closingIdx + 1];
+    if (rightNeighbour && sameWs.some((t) => t.id === rightNeighbour.id)) {
+        return rightNeighbour.id;
+    }
+    // Otherwise, fall back to the rightmost remaining tab in the workspace.
+    return sameWs[sameWs.length - 1].id;
 }
 
 export async function subscribeTabs(): Promise<UnlistenFn> {

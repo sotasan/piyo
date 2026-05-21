@@ -7,9 +7,9 @@
         "empty": "結果がありません。",
         "reloadTheme": "テーマを再読み込み"
     },
-    "sidebar": {
-        "open": "サイドバーを開く",
-        "close": "サイドバーを閉じる"
+    "fileTree": {
+        "open": "ファイルツリーを開く",
+        "close": "ファイルツリーを閉じる"
     },
     "updates": {
         "title": "アップデートがあります",
@@ -20,6 +20,11 @@
     "terminal": {
         "processExited": "[プロセスが終了しました]",
         "searchPlaceholder": "スクロールバックを検索…"
+    },
+    "workspaces": {
+        "homeLabel": "ホームワークスペース",
+        "workspaceLabel": "ワークスペース {{path}}",
+        "addLabel": "ワークスペースを追加"
     },
     "menu": {
         "file": "ファイル",
@@ -35,6 +40,10 @@
         "closeTab": "タブを閉じる",
         "selectPrevTab": "前のタブを選択",
         "selectNextTab": "次のタブを選択",
-        "showTab": "タブ {{index}} を表示"
+        "showTab": "タブ {{index}} を表示",
+        "addWorkspace": "ワークスペースを追加…",
+        "removeWorkspace": "ワークスペースを削除",
+        "showHomeWorkspace": "ホームワークスペースを表示",
+        "showWorkspace": "ワークスペース {{index}} を表示"
     }
 }
