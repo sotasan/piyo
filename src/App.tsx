@@ -3,6 +3,7 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } fr
 import { useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
+import { useShallow } from "zustand/react/shallow";
 
 import CommandPalette from "@/components/CommandPalette";
 import FileTree from "@/components/FileTree";
@@ -43,8 +44,12 @@ function App() {
     const setDims = useTabsStore((s) => s.setDims);
 
     const activeWorkspaceId = useWorkspacesStore((s) => s.activeId);
-    const visibleTabs = useTabsStore((s) =>
-        activeWorkspaceId === null ? [] : s.tabs.filter((t) => t.workspaceId === activeWorkspaceId),
+    const visibleTabs = useTabsStore(
+        useShallow((s) =>
+            activeWorkspaceId === null
+                ? []
+                : s.tabs.filter((t) => t.workspaceId === activeWorkspaceId),
+        ),
     );
 
     const separatorWidth = useTransform(sizeMV, (v) => Math.min(SEPARATOR_PX, Math.max(0, v)));

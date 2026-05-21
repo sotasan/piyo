@@ -29,7 +29,7 @@ interface TabsStore {
     spawn: (cwd: string | null, workspaceId: number) => Promise<number>;
     spawnSibling: () => Promise<number>;
     close: (rid: number) => void;
-    reorder: (oldIndex: number, newIndex: number) => void;
+    reorder: (activeId: number, overId: number) => void;
     activate: (rid: number) => void;
     selectPrev: () => void;
     selectNext: () => void;
@@ -79,8 +79,11 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         void ptyClose(rid);
     },
 
-    reorder: (oldIndex, newIndex) =>
+    reorder: (activeId, overId) =>
         set((s) => {
+            const oldIndex = s.tabs.findIndex((t) => t.id === activeId);
+            const newIndex = s.tabs.findIndex((t) => t.id === overId);
+            if (oldIndex < 0 || newIndex < 0) return s;
             const tabs = [...s.tabs];
             const [moved] = tabs.splice(oldIndex, 1);
             tabs.splice(newIndex, 0, moved);

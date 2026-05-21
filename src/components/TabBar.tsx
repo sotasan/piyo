@@ -23,7 +23,7 @@ type Props = {
     activeId: number | null;
     onActivate: (id: number) => void;
     onClose: (id: number) => void;
-    onReorder: (oldIndex: number, newIndex: number) => void;
+    onReorder: (activeId: number, overId: number) => void;
 };
 
 type SortableTabProps = {
@@ -124,10 +124,7 @@ function TabBar({ tabs, activeId, onActivate, onClose, onReorder }: Props) {
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
         if (!over || active.id === over.id) return;
-        const oldIndex = tabs.findIndex((t) => t.id === active.id);
-        const newIndex = tabs.findIndex((t) => t.id === over.id);
-        if (oldIndex < 0 || newIndex < 0) return;
-        onReorder(oldIndex, newIndex);
+        onReorder(active.id as number, over.id as number);
     };
 
     return (
