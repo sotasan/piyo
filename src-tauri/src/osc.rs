@@ -17,6 +17,9 @@ impl OscPerformer {
     }
 
     fn notify(&self, title: &str, body: &str) {
+        if self.window_focused() {
+            return;
+        }
         let _ = self
             .app
             .notification()
@@ -42,7 +45,7 @@ impl OscPerformer {
 
     fn handle_claude_stop(&self, payload: &str) {
         let payload = payload.trim();
-        if payload.is_empty() || self.window_focused() {
+        if payload.is_empty() {
             return;
         }
         let body = serde_json::from_str::<ClaudeStopPayload>(payload)
@@ -54,7 +57,7 @@ impl OscPerformer {
 
     fn handle_codex_notify(&self, payload: &str) {
         let payload = payload.trim();
-        if payload.is_empty() || self.window_focused() {
+        if payload.is_empty() {
             return;
         }
         let Ok(parsed) = serde_json::from_str::<CodexNotifyPayload>(payload) else {
