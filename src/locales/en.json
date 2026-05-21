@@ -7,9 +7,9 @@
         "empty": "No results.",
         "reloadTheme": "Reload Theme"
     },
-    "sidebar": {
-        "open": "Open sidebar",
-        "close": "Close sidebar"
+    "fileTree": {
+        "open": "Open file tree",
+        "close": "Close file tree"
     },
     "updates": {
         "title": "Update available",

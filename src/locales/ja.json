@@ -7,9 +7,9 @@
         "empty": "結果がありません。",
         "reloadTheme": "テーマを再読み込み"
     },
-    "sidebar": {
-        "open": "サイドバーを開く",
-        "close": "サイドバーを閉じる"
+    "fileTree": {
+        "open": "ファイルツリーを開く",
+        "close": "ファイルツリーを閉じる"
     },
     "updates": {
         "title": "アップデートがあります",

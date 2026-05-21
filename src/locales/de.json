@@ -7,9 +7,9 @@
         "empty": "Keine Ergebnisse.",
         "reloadTheme": "Theme neu laden"
     },
-    "sidebar": {
-        "open": "Seitenleiste öffnen",
-        "close": "Seitenleiste schließen"
+    "fileTree": {
+        "open": "Dateibaum öffnen",
+        "close": "Dateibaum schließen"
     },
     "updates": {
         "title": "Update verfügbar",

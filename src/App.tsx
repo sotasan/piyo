@@ -4,8 +4,8 @@ import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import type { PanelSize } from "react-resizable-panels";
 
 import CommandPalette from "@/components/CommandPalette";
-import Sidebar from "@/components/Sidebar";
-import SidebarToggle from "@/components/SidebarToggle";
+import FileTree from "@/components/FileTree";
+import FileTreeToggle from "@/components/FileTreeToggle";
 import TabBar from "@/components/TabBar";
 import TabTitle from "@/components/TabTitle";
 import Terminal from "@/components/Terminal";
@@ -79,7 +79,7 @@ function App() {
                     onResize={handleSidebarResize}
                 >
                     <div className="absolute inset-0 top-11">
-                        <Sidebar />
+                        <FileTree />
                     </div>
                 </Panel>
                 <MotionSeparator
@@ -107,7 +107,7 @@ function App() {
                 className="absolute inset-x-0 top-0 z-10 gap-1"
                 style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX, paddingRight: 8 }}
             >
-                <SidebarToggle collapsed={collapsed} onClick={toggle} />
+                <FileTreeToggle collapsed={collapsed} onClick={toggle} />
                 {tabs.length >= 2 ? (
                     <TabBar
                         tabs={tabs}
