@@ -6,7 +6,7 @@ import {
     useSensors,
     type DragEndEvent,
 } from "@dnd-kit/core";
-import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -30,7 +30,7 @@ function SortableUserWorkspace({
         opacity: isDragging ? 0.6 : 1,
     };
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners} role={undefined}>
             <WorkspaceIcon
                 workspace={workspace}
                 isActive={isActive}
@@ -73,7 +73,7 @@ function WorkspaceSidebar() {
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
-                    modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                    modifiers={[restrictToVerticalAxis]}
                     onDragEnd={handleDragEnd}
                 >
                     <SortableContext
