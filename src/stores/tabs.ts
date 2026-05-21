@@ -62,7 +62,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         return rid;
     },
 
-    spawnSibling: () => {
+    spawnSibling: async () => {
         const { activeId, cwds, tabs, spawn } = get();
         if (activeId === null) {
             throw new Error("spawnSibling called with no active tab");
