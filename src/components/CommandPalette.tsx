@@ -62,7 +62,6 @@ export default function CommandPalette() {
                         <Command.Item
                             key={f}
                             onSelect={() => {
-                                console.log("[palette] open file:", f);
                                 close();
                             }}
                             className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-accent/30"
