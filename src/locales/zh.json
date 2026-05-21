@@ -36,5 +36,25 @@
         "selectPrevTab": "选择上一个标签页",
         "selectNextTab": "选择下一个标签页",
         "showTab": "显示标签页 {{index}}"
+    },
+    "dialogs": {
+        "closeTab": {
+            "title": "关闭标签页？",
+            "body": "{{name}} 仍在运行。如果关闭此标签页，进程将被终止。",
+            "ok": "关闭",
+            "cancel": "取消"
+        },
+        "closeWindow": {
+            "title": "关闭窗口？",
+            "body": "此窗口中的所有终端会话将被终止。",
+            "ok": "关闭",
+            "cancel": "取消"
+        },
+        "quit": {
+            "title": "退出 Piyo？",
+            "body": "所有终端会话将被终止。",
+            "ok": "退出",
+            "cancel": "取消"
+        }
     }
 }
