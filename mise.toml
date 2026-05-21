@@ -1,3 +1,6 @@
+[env]
+_.file = ".env"
+
 [tools]
 bun = "latest"
 rust = "stable"
