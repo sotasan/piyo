@@ -29,3 +29,6 @@ export const ptyResize = (
 ) => invoke<void>("pty_resize", { rid, cols, rows, cellWidth, cellHeight });
 
 export const ptyClose = (rid: number) => invoke<void>("pty_close", { rid });
+
+export const ptyForegroundProcess = (rid: number) =>
+    invoke<{ name: string } | null>("pty_foreground_process", { rid });
