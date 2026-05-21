@@ -3,9 +3,19 @@
 #   1. Drop the shim's own directory from PATH (otherwise the exec below
 #      would recurse into this script forever).
 #   2. Capture the controlling tty so claude's Stop hook can write its
-#      OSC 7496 notification straight to the terminal even when stdout
-#      is redirected.
-#   3. Push kitty keyboard mode 1 for the duration of claude — claude
+#      OSC 7496 notification straight to the terminal — the hook runs as
+#      a child of claude with no controlling tty, so /dev/tty fails for
+#      it (the parent shim still uses /dev/tty fine for its own writes).
+#   3. Enable Claude Code's built-in Ghostty-style notification channel
+#      so *Notification* events (permission prompts etc.) arrive as
+#      OSC sequences that piyo's host turns into native OS notifications.
+#      preferredNotifChannel doesn't cover Stop, hence the hook below.
+#   4. Wire a Stop hook that forwards Claude's turn-end JSON inside an
+#      OSC 7496 sequence — piyo's OSC parser extracts the last assistant
+#      message and fires a native OS notification. Newlines are stripped
+#      from the payload so xterm.js doesn't treat them as a sequence
+#      terminator and leak the trailing BEL onto the screen.
+#   5. Push kitty keyboard mode 1 for the duration of claude — claude
 #      relies on the disambiguated encoding to see Shift+Enter as a
 #      distinct key. The shell init doesn't push it (would rewrite
 #      Ctrl+C as CSI-u and break SIGINT for cooked-mode commands like
@@ -15,15 +25,16 @@ PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
 PIYO_TTY=$(tty 2>/dev/null) || PIYO_TTY=/dev/tty
 export PIYO_TTY
 
-trap 'printf "\033[<u" > "$PIYO_TTY" 2>/dev/null' EXIT INT TERM HUP
-printf '\033[>1u' > "$PIYO_TTY" 2>/dev/null
+trap 'printf "\033[<u" > /dev/tty 2>/dev/null' EXIT INT TERM HUP
+printf '\033[>1u' > /dev/tty 2>/dev/null
 
 claude --settings '{
+    "preferredNotifChannel": "ghostty",
     "hooks": {
         "Stop": [{
             "hooks": [{
                 "type": "command",
-                "command": "{ printf \"\\033]7496;claude;stop;\"; cat; printf \"\\007\"; } > \"$PIYO_TTY\" 2>/dev/null"
+                "command": "{ printf \"\\033]7496;claude;stop;\"; tr -d \"\\012\"; printf \"\\007\"; } > \"$PIYO_TTY\" 2>/dev/null"
             }]
         }]
     }
