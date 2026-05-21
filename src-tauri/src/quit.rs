@@ -7,6 +7,9 @@
 
 use std::sync::{OnceLock, RwLock};
 
+use objc2::MainThreadMarker;
+use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};
+use objc2_foundation::NSString;
 use serde::Deserialize;
 use tauri::AppHandle;
 
@@ -43,22 +46,22 @@ fn any_tab_busy(app: &AppHandle) -> bool {
 /// Returns `true` (allow quit silently) if JS hasn't pushed strings
 /// yet — the only path to this branch is a Cmd+Q via system menu bar
 /// before the main window has shown, where a silent quit is fine.
+///
+/// Uses `NSAlert` directly so the dialog shows the app icon. The
+/// alternative `rfd` parentless path goes through
+/// `CFUserNotificationDisplayAlert`, which always stamps a level
+/// (caution / note / stop) badge regardless of the icon we want.
 fn show_quit_dialog() -> bool {
     let Some(strings) = QUIT_STRINGS.read().unwrap().clone() else {
         return true;
     };
-    matches!(
-        rfd::MessageDialog::new()
-            .set_level(rfd::MessageLevel::Warning)
-            .set_title(&strings.title)
-            .set_description(&strings.body)
-            .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                strings.ok.clone(),
-                strings.cancel.clone(),
-            ))
-            .show(),
-        rfd::MessageDialogResult::Ok
-    )
+    let mtm = MainThreadMarker::new().expect("applicationShouldTerminate: runs on main");
+    let alert = NSAlert::new(mtm);
+    alert.setMessageText(&NSString::from_str(&strings.title));
+    alert.setInformativeText(&NSString::from_str(&strings.body));
+    alert.addButtonWithTitle(&NSString::from_str(&strings.ok));
+    alert.addButtonWithTitle(&NSString::from_str(&strings.cancel));
+    alert.runModal() == NSAlertFirstButtonReturn
 }
 
 extern "C" fn should_terminate() -> bool {

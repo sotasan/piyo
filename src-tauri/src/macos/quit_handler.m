@@ -14,9 +14,9 @@
 static PiyoShouldTerminateCallback g_callback = NULL;
 
 static NSApplicationTerminateReply piyo_application_should_terminate(
-    id self,
-    SEL _cmd,
-    NSApplication *sender)
+    __unused id self,
+    __unused SEL _cmd,
+    __unused NSApplication *sender)
 {
     if (g_callback && !g_callback()) {
         return NSTerminateCancel;
