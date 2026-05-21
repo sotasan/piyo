@@ -27,7 +27,7 @@ export function useTabsLifecycle(): void {
                 }
             });
 
-            await useTabsStore.getState().spawn(null);
+            await useTabsStore.getState().spawn(null, 0);
         })().catch((e) => console.error("tabs lifecycle startup failed", e));
 
         return () => {

@@ -12,6 +12,7 @@ export type PtyEvent = ArrayBuffer;
 export type Tab = {
     id: number;
     title: string;
+    workspaceId: number;
 };
 
 const tabChannels = new Map<number, Channel<ArrayBuffer>>();
@@ -24,7 +25,7 @@ interface TabsStore {
     dims: { cols: number; rows: number };
     progress: Map<number, IProgressState>;
 
-    spawn: (cwd: string | null) => Promise<number>;
+    spawn: (cwd: string | null, workspaceId: number) => Promise<number>;
     spawnSibling: () => Promise<number>;
     close: (rid: number) => void;
     reorder: (oldIndex: number, newIndex: number) => void;
@@ -48,22 +49,29 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     dims: { cols: 80, rows: 24 },
     progress: new Map(),
 
-    spawn: async (cwd) => {
+    spawn: async (cwd, workspaceId) => {
         const channel = new Channel<ArrayBuffer>();
         const { cols, rows } = get().dims;
         const { rid, shell } = await ptySpawn(channel, cols, rows, cwd);
         channel.onmessage = (event) => tabHandlers.get(rid)?.(event);
         tabChannels.set(rid, channel);
         set((s) => ({
-            tabs: [...s.tabs, { id: rid, title: shell }],
+            tabs: [...s.tabs, { id: rid, title: shell, workspaceId }],
             activeId: rid,
         }));
         return rid;
     },
 
     spawnSibling: () => {
-        const { activeId, cwds, spawn } = get();
-        return spawn(activeId !== null ? (cwds.get(activeId) ?? null) : null);
+        const { activeId, cwds, tabs, spawn } = get();
+        if (activeId === null) {
+            throw new Error("spawnSibling called with no active tab");
+        }
+        const active = tabs.find((t) => t.id === activeId);
+        if (!active) {
+            throw new Error("spawnSibling: active tab missing from tabs");
+        }
+        return spawn(cwds.get(activeId) ?? null, active.workspaceId);
     },
 
     close: (rid) => {
