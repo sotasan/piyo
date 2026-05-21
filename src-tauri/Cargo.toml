@@ -24,7 +24,7 @@ bindgen = "0.72"
 [dependencies]
 anyhow = "1"
 bitflags = { version = "2", features = ["serde"] }
-cached = "0.59"
+cached = "1"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 etcetera = "0.11"
 libghostty-vt = { git = "https://github.com/uzaaft/libghostty-rs", branch = "master", features = [
