@@ -60,7 +60,7 @@ function WorkspaceSidebar() {
     };
 
     return (
-        <aside className="flex h-full w-13 shrink-0 flex-col items-center gap-1 bg-transparent py-2">
+        <aside className="flex h-full w-13 shrink-0 flex-col items-center gap-1 bg-transparent pt-11 pb-2">
             {home && (
                 <WorkspaceIcon
                     workspace={home}

@@ -1,3 +1,4 @@
+import { Tooltip } from "@base-ui/react/tooltip";
 import { animate, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react";
 import { useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
@@ -10,22 +11,24 @@ import TabBar from "@/components/TabBar";
 import TabTitle from "@/components/TabTitle";
 import Terminal from "@/components/Terminal";
 import Titlebar from "@/components/Titlebar";
+import WorkspaceSidebar from "@/components/WorkspaceSidebar";
 import { useTabsLifecycle } from "@/hooks/useTabsLifecycle";
 import { useTabsStore } from "@/stores/tabs";
+import { useWorkspacesStore } from "@/stores/workspaces";
 
 import "@/App.css";
 
 const TRAFFIC_LIGHTS_INSET_PX = 84;
-const DEFAULT_SIDEBAR_PX = 200;
+const DEFAULT_FILE_TREE_PX = 200;
 const SEPARATOR_PX = 4;
 const TWEEN = { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const };
 const MotionSeparator = motion.create(Separator);
 
 function App() {
-    const sidebarRef = usePanelRef();
+    const fileTreePanelRef = usePanelRef();
     const [collapsed, setCollapsed] = useState(true);
     const sizeMV = useMotionValue(0);
-    const lastExpandedRef = useRef(DEFAULT_SIDEBAR_PX);
+    const lastExpandedRef = useRef(DEFAULT_FILE_TREE_PX);
     const isAnimatingRef = useRef(false);
 
     useTabsLifecycle();
@@ -39,13 +42,18 @@ function App() {
     const reorder = useTabsStore((s) => s.reorder);
     const setDims = useTabsStore((s) => s.setDims);
 
+    const activeWorkspaceId = useWorkspacesStore((s) => s.activeId);
+    const visibleTabs = useTabsStore((s) =>
+        activeWorkspaceId === null ? [] : s.tabs.filter((t) => t.workspaceId === activeWorkspaceId),
+    );
+
     const separatorWidth = useTransform(sizeMV, (v) => Math.min(SEPARATOR_PX, Math.max(0, v)));
 
     useMotionValueEvent(sizeMV, "change", (v) => {
-        sidebarRef.current?.resize(`${v}px`);
+        fileTreePanelRef.current?.resize(`${v}px`);
     });
 
-    const handleSidebarResize = (size: PanelSize) => {
+    const handleFileTreeResize = (size: PanelSize) => {
         if (!isAnimatingRef.current && !collapsed && size.inPixels > 0) {
             lastExpandedRef.current = size.inPixels;
             sizeMV.set(size.inPixels);
@@ -64,71 +72,78 @@ function App() {
         });
     };
 
-    const activeTitle = tabs.find((t) => t.id === activeId)?.title ?? "";
+    const activeTitle = visibleTabs.find((t) => t.id === activeId)?.title ?? "";
 
     return (
-        <div className="relative h-full w-full bg-accent/10">
-            <Group className="h-full" orientation="horizontal">
-                <Panel
-                    panelRef={sidebarRef}
-                    defaultSize="0px"
-                    minSize="0%"
-                    maxSize="480px"
-                    groupResizeBehavior="preserve-pixel-size"
-                    className="relative overflow-hidden"
-                    onResize={handleSidebarResize}
+        <Tooltip.Provider delay={300}>
+            <div className="relative h-full w-full bg-accent/10">
+                <div className="flex h-full">
+                    <WorkspaceSidebar />
+                    <div className="relative flex-1">
+                        <Group className="h-full" orientation="horizontal">
+                            <Panel
+                                panelRef={fileTreePanelRef}
+                                defaultSize="0px"
+                                minSize="0%"
+                                maxSize="480px"
+                                groupResizeBehavior="preserve-pixel-size"
+                                className="relative overflow-hidden"
+                                onResize={handleFileTreeResize}
+                            >
+                                <div className="absolute inset-0 top-11">
+                                    <FileTree />
+                                </div>
+                            </Panel>
+                            <MotionSeparator
+                                disabled={collapsed}
+                                style={{ width: separatorWidth, flexBasis: separatorWidth }}
+                            />
+                            <Panel className="relative">
+                                <div className="absolute top-10 right-2 bottom-2 left-2 overflow-hidden rounded-xl border border-border bg-background">
+                                    {[...tabs]
+                                        .sort((a, b) => a.id - b.id)
+                                        .map((tab) => (
+                                            <Terminal
+                                                key={tab.id}
+                                                rid={tab.id}
+                                                active={tab.id === activeId}
+                                                onResize={(cols, rows) => {
+                                                    if (tab.id === activeId) setDims(cols, rows);
+                                                }}
+                                            />
+                                        ))}
+                                </div>
+                            </Panel>
+                        </Group>
+                    </div>
+                </div>
+                <Titlebar
+                    className="absolute inset-x-0 top-0 z-10 gap-1"
+                    style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX, paddingRight: 8 }}
                 >
-                    <div className="absolute inset-0 top-11">
-                        <FileTree />
-                    </div>
-                </Panel>
-                <MotionSeparator
-                    disabled={collapsed}
-                    style={{ width: separatorWidth, flexBasis: separatorWidth }}
-                />
-                <Panel className="relative">
-                    <div className="absolute top-10 right-2 bottom-2 left-2 overflow-hidden rounded-xl border border-border bg-background">
-                        {[...tabs]
-                            .sort((a, b) => a.id - b.id)
-                            .map((tab) => (
-                                <Terminal
-                                    key={tab.id}
-                                    rid={tab.id}
-                                    active={tab.id === activeId}
-                                    onResize={(cols, rows) => {
-                                        if (tab.id === activeId) setDims(cols, rows);
-                                    }}
-                                />
-                            ))}
-                    </div>
-                </Panel>
-            </Group>
-            <Titlebar
-                className="absolute inset-x-0 top-0 z-10 gap-1"
-                style={{ paddingLeft: TRAFFIC_LIGHTS_INSET_PX, paddingRight: 8 }}
-            >
-                <FileTreeToggle collapsed={collapsed} onClick={toggle} />
-                {tabs.length >= 2 ? (
-                    <TabBar
-                        tabs={tabs}
-                        activeId={activeId}
-                        onActivate={activate}
-                        onClose={closeTab}
-                        onReorder={reorder}
-                    />
-                ) : activeId !== null ? (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <TabTitle
-                            rid={activeId}
-                            cwd={activeCwd}
-                            title={activeTitle}
-                            className="text-sm text-foreground"
+                    <FileTreeToggle collapsed={collapsed} onClick={toggle} />
+                    {visibleTabs.length >= 2 ? (
+                        <TabBar
+                            tabs={visibleTabs}
+                            activeId={activeId}
+                            onActivate={activate}
+                            onClose={closeTab}
+                            onReorder={reorder}
                         />
-                    </div>
-                ) : null}
-            </Titlebar>
-            <CommandPalette />
-        </div>
+                    ) : activeId !== null ? (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <TabTitle
+                                rid={activeId}
+                                cwd={activeCwd}
+                                title={activeTitle}
+                                className="text-sm text-foreground"
+                            />
+                        </div>
+                    ) : null}
+                </Titlebar>
+                <CommandPalette />
+            </div>
+        </Tooltip.Provider>
     );
 }
 

@@ -90,22 +90,33 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     activate: (rid) => set({ activeId: rid }),
 
     selectPrev: () => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs, activeId } = get();
-        if (tabs.length < 2 || activeId === null) return;
-        const idx = tabs.findIndex((t) => t.id === activeId);
-        set({ activeId: tabs[(idx - 1 + tabs.length) % tabs.length].id });
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        if (visible.length < 2 || activeId === null) return;
+        const idx = visible.findIndex((t) => t.id === activeId);
+        if (idx < 0) return;
+        set({ activeId: visible[(idx - 1 + visible.length) % visible.length].id });
     },
 
     selectNext: () => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs, activeId } = get();
-        if (tabs.length < 2 || activeId === null) return;
-        const idx = tabs.findIndex((t) => t.id === activeId);
-        set({ activeId: tabs[(idx + 1) % tabs.length].id });
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        if (visible.length < 2 || activeId === null) return;
+        const idx = visible.findIndex((t) => t.id === activeId);
+        if (idx < 0) return;
+        set({ activeId: visible[(idx + 1) % visible.length].id });
     },
 
     showAtIndex: (index) => {
+        const activeWsId = useWorkspacesStore.getState().activeId;
+        if (activeWsId === null) return;
         const { tabs } = get();
-        const t = tabs[Math.min(index, tabs.length - 1)];
+        const visible = tabs.filter((t) => t.workspaceId === activeWsId);
+        const t = visible[Math.min(index, visible.length - 1)];
         if (t) set({ activeId: t.id });
     },
 
