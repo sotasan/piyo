@@ -9,8 +9,10 @@ import { subscribeTabs, useTabsStore } from "@/stores/tabs";
 
 async function anyTabBusyInWindow(): Promise<boolean> {
     const tabs = useTabsStore.getState().tabs;
-    const results = await Promise.all(tabs.map((t) => ptyForegroundProcess(t.id)));
-    return results.some((r) => r !== null);
+    const results = await Promise.allSettled(tabs.map((t) => ptyForegroundProcess(t.id)));
+    // A rejected probe means we couldn't tell — treat as busy so we
+    // err on the side of confirming rather than closing silently.
+    return results.some((r) => r.status === "rejected" || r.value !== null);
 }
 
 export function useTabsLifecycle(): void {
