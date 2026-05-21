@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { ptyClose, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit } from "@/ipc/events";
+import { useWorkspacesStore } from "@/stores/workspaces";
 
 /** Raw bytes forwarded from the PTY reader thread. */
 export type PtyEvent = ArrayBuffer;
@@ -146,9 +147,36 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
             const progress = new Map(s.progress);
             progress.delete(rid);
             const next = s.tabs.filter((t) => t.id !== rid);
+            const nextActiveId = pickNextActive(rid, s.tabs, next, s.activeId);
+
+            // If the active workspace just lost all its tabs, queue a replacement
+            // spawn at the workspace's path so the terminal area is never empty.
+            const closing = s.tabs.find((t) => t.id === rid);
+            const wsState = useWorkspacesStore.getState();
+            const activeWsId = wsState.activeId;
+            if (
+                closing &&
+                activeWsId !== null &&
+                closing.workspaceId === activeWsId &&
+                !next.some((t) => t.workspaceId === activeWsId)
+            ) {
+                const ws = wsState.workspaces.find((w) => w.id === activeWsId);
+                if (ws) {
+                    queueMicrotask(() => {
+                        void useTabsStore
+                            .getState()
+                            .spawn(ws.path, ws.id)
+                            .then((newRid) =>
+                                useWorkspacesStore.getState().setActiveTabFor(ws.id, newRid),
+                            )
+                            .catch((e) => console.error("auto-spawn on empty workspace failed", e));
+                    });
+                }
+            }
+
             return {
                 tabs: next,
-                activeId: pickNextActive(rid, s.tabs, next, s.activeId),
+                activeId: nextActiveId,
                 cwds,
                 progress,
             };
@@ -162,8 +190,21 @@ function pickNextActive(
     currentActiveId: number | null,
 ): number | null {
     if (currentActiveId !== closingRid) return currentActiveId;
-    const closingIdx = prevTabs.findIndex((t) => t.id === closingRid);
-    return prevTabs[closingIdx + 1]?.id ?? nextTabs[nextTabs.length - 1]?.id ?? null;
+    const closing = prevTabs.find((t) => t.id === closingRid);
+    if (!closing) return nextTabs[nextTabs.length - 1]?.id ?? null;
+
+    const sameWs = nextTabs.filter((t) => t.workspaceId === closing.workspaceId);
+    if (sameWs.length === 0) return null;
+
+    // Prefer the tab originally to the right of the closing tab within the same workspace.
+    const prevSameWs = prevTabs.filter((t) => t.workspaceId === closing.workspaceId);
+    const closingIdx = prevSameWs.findIndex((t) => t.id === closingRid);
+    const rightNeighbour = prevSameWs[closingIdx + 1];
+    if (rightNeighbour && sameWs.some((t) => t.id === rightNeighbour.id)) {
+        return rightNeighbour.id;
+    }
+    // Otherwise, fall back to the rightmost remaining tab in the workspace.
+    return sameWs[sameWs.length - 1].id;
 }
 
 export async function subscribeTabs(): Promise<UnlistenFn> {
