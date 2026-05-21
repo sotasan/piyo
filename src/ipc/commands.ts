@@ -32,3 +32,13 @@ export const ptyClose = (rid: number) => invoke<void>("pty_close", { rid });
 
 export const ptyForegroundProcess = (rid: number) =>
     invoke<{ name: string } | null>("pty_foreground_process", { rid });
+
+export type QuitDialogStrings = {
+    title: string;
+    body: string;
+    ok: string;
+    cancel: string;
+};
+
+export const setQuitDialogStrings = (strings: QuitDialogStrings) =>
+    invoke<void>("set_quit_dialog_strings", { strings });

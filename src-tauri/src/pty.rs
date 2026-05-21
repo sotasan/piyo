@@ -31,7 +31,7 @@ const READ_BUF_SIZE: usize = 4096;
 static ACTIVE_PTYS: LazyLock<std::sync::Mutex<HashSet<u32>>> =
     LazyLock::new(|| std::sync::Mutex::new(HashSet::new()));
 
-#[allow(dead_code)] // Consumed by the quit handler in a follow-up task.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn active_rids() -> Vec<u32> {
     ACTIVE_PTYS.lock().unwrap().iter().copied().collect()
 }

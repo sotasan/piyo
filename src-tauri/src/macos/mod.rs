@@ -1,9 +1,10 @@
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
 mod bindings {
     include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
 }
 
+#[cfg(target_os = "macos")]
+pub use bindings::piyo_install_quit_handler;
 #[cfg(target_os = "macos")]
 use bindings::*;
 
