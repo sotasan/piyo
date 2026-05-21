@@ -7,8 +7,8 @@ pub const DEFAULT_SIZE: u32 = 32;
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use cached::SizedCache;
-    use cached::proc_macro::cached;
+    use cached::LruCache;
+    use cached::cached;
     use objc2::AnyThread;
     use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWorkspace};
     use objc2_foundation::{NSDictionary, NSSize, NSString};
@@ -22,8 +22,8 @@ mod platform {
     }
 
     #[cached(
-        ty = "SizedCache<(String, u32, String), Vec<u8>>",
-        create = "{ SizedCache::with_size(CACHE_CAPACITY) }",
+        ty = "LruCache<(String, u32, String), Vec<u8>>",
+        create = "{ LruCache::with_size(CACHE_CAPACITY) }",
         convert = r#"{ (path.to_string(), clamp_size(size), revision.to_string()) }"#,
         option = true
     )]
