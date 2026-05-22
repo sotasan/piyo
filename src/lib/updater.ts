@@ -1,4 +1,5 @@
 import { ask } from "@tauri-apps/plugin-dialog";
+import { warn } from "@tauri-apps/plugin-log";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 
@@ -19,6 +20,6 @@ export async function checkForUpdates(): Promise<void> {
             await relaunch();
         }
     } catch (e) {
-        console.warn("update check failed", e);
+        warn(`update check failed: ${e}`);
     }
 }
