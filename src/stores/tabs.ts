@@ -1,10 +1,12 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { ask } from "@tauri-apps/plugin-dialog";
 import type { IProgressState } from "@xterm/addon-progress";
 import { create } from "zustand";
 
-import { ptyClose, ptySpawn } from "@/ipc/commands";
+import { ptyClose, ptyForegroundProcess, ptySpawn } from "@/ipc/commands";
 import { onPtyCwd, onPtyExit } from "@/ipc/events";
+import { i18next } from "@/lib/i18n";
 
 /** Raw bytes forwarded from the PTY reader thread. */
 export type PtyEvent = ArrayBuffer;
@@ -26,7 +28,7 @@ interface TabsStore {
 
     spawn: (cwd: string | null) => Promise<number>;
     spawnSibling: () => Promise<number>;
-    close: (rid: number) => void;
+    close: (rid: number) => Promise<void>;
     reorder: (oldIndex: number, newIndex: number) => void;
     activate: (rid: number) => void;
     selectPrev: () => void;
@@ -66,7 +68,20 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         return spawn(activeId !== null ? (cwds.get(activeId) ?? null) : null);
     },
 
-    close: (rid) => {
+    close: async (rid) => {
+        // If the probe rejects the rid is likely already gone (raced
+        // with handleExit); treat as "no foreground" and let the close
+        // proceed as a no-op.
+        const fg = await ptyForegroundProcess(rid).catch(() => null);
+        if (fg) {
+            const ok = await ask(i18next.t("dialogs.closeTab.body", { name: fg.name }), {
+                title: i18next.t("dialogs.closeTab.title"),
+                kind: "warning",
+                okLabel: i18next.t("dialogs.closeTab.ok"),
+                cancelLabel: i18next.t("dialogs.closeTab.cancel"),
+            });
+            if (!ok) return;
+        }
         void ptyClose(rid);
     },
 

@@ -1,5 +1,12 @@
 #[cfg(target_os = "macos")]
-include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/macos_bindings.rs"));
+}
+
+#[cfg(target_os = "macos")]
+pub use bindings::piyo_install_quit_handler;
+#[cfg(target_os = "macos")]
+use bindings::*;
 
 #[cfg(target_os = "macos")]
 pub mod context_menu {

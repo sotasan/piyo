@@ -1,10 +1,12 @@
 //! PTY ownership, IPC commands, and ghostty session orchestration.
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{Context, Result};
 use portable_pty::{MasterPty, PtySize, native_pty_system};
@@ -21,6 +23,18 @@ pub const EVENT_PTY_CWD: &str = "pty:cwd";
 pub const EVENT_PTY_EXIT: &str = "pty:exit";
 
 const READ_BUF_SIZE: usize = 4096;
+
+/// Active PTY rids. Used by the quit handler to scan every live PTY
+/// for a non-shell foreground process. Insert in `pty_spawn`, remove
+/// in `pty_close` and when the session thread exits (child died
+/// naturally).
+static ACTIVE_PTYS: LazyLock<std::sync::Mutex<HashSet<u32>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashSet::new()));
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn active_rids() -> Vec<u32> {
+    ACTIVE_PTYS.lock().unwrap().iter().copied().collect()
+}
 
 #[derive(Debug)]
 pub struct CommandError(anyhow::Error);
@@ -85,6 +99,14 @@ pub struct PtyHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: vt::PtyWriter,
     child: ChildHandle,
+    /// `child.process_id()` — the pid of `/usr/bin/login`, not the
+    /// user shell. macOS `login` forks once before exec'ing the shell
+    /// so it can wait+write utmpx, so the shell's real pid is login's
+    /// single child. We resolve it lazily on first foreground query.
+    login_pid: u32,
+    /// Cached real pid of the user shell. `None` until first query
+    /// finds a child, then permanently set.
+    shell_pid: OnceLock<u32>,
     session_tx: Mutex<Sender<SessionMsg>>,
     /// Next `seq` the reader will stamp on outgoing chunks.
     reader_seq: Arc<AtomicU64>,
@@ -180,6 +202,8 @@ pub async fn pty_spawn(
         .context("failed to spawn shell")?;
     drop(pair.slave);
 
+    let child_pid = child.process_id().context("spawned shell has no pid")?;
+
     let mut reader = pair
         .master
         .try_clone_reader()
@@ -206,12 +230,15 @@ pub async fn pty_spawn(
         master: Mutex::new(pair.master),
         writer,
         child,
+        login_pid: child_pid,
+        shell_pid: OnceLock::new(),
         session_tx: Mutex::new(session_tx),
         reader_seq,
         interrupt_seq,
     };
 
     let rid = app.resources_table().add(handle);
+    ACTIVE_PTYS.lock().unwrap().insert(rid);
 
     // Reader thread: pulls bytes from the PTY, taps OSC dispatches, and
     // hands each chunk to the vt session for cell parsing and forwarding.
@@ -299,6 +326,7 @@ pub async fn pty_spawn(
                 SessionMsg::Shutdown => break,
             }
         }
+        ACTIVE_PTYS.lock().unwrap().remove(&rid);
         let _ = events_clone.send(InvokeResponseBody::Raw(wire::exit_event()));
         let _ = app_for_session.emit(EVENT_PTY_EXIT, PtyExit { rid });
     });
@@ -336,6 +364,7 @@ pub fn pty_close(app: AppHandle, rid: u32) -> CommandResult<()> {
     h.shutdown();
     drop(h);
     let _ = app.resources_table().close(rid);
+    ACTIVE_PTYS.lock().unwrap().remove(&rid);
     Ok(())
 }
 
@@ -350,5 +379,78 @@ fn reap(child: &ChildHandle) {
     if let Some(mut c) = child.lock().unwrap().take() {
         let _ = c.kill();
         let _ = c.wait();
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForegroundProc {
+    pub name: String,
+}
+
+/// Return `Some(ForegroundProc)` if the PTY's foreground process group is
+/// owned by something other than the spawned shell; `None` otherwise (or
+/// on any error querying state).
+pub fn foreground_process_for(app: &AppHandle, rid: u32) -> Option<ForegroundProc> {
+    let handle = app.resources_table().get::<PtyHandle>(rid).ok()?;
+    let master = handle.master.lock().ok()?;
+    let pgid = master.process_group_leader()?;
+    if pgid <= 0 {
+        return None;
+    }
+    // If we haven't resolved the shell pid yet, the shell hasn't been
+    // exec'd as login's child — there's no way anything is running, so
+    // report "not busy".
+    let shell_pid = resolve_shell_pid(handle.as_ref())?;
+    if pgid as u32 == shell_pid {
+        return None;
+    }
+    Some(ForegroundProc {
+        name: resolve_process_name(pgid),
+    })
+}
+
+/// Pick `login_pid`'s single child (the user shell) and cache it on
+/// `PtyHandle::shell_pid`. Returns `None` if login hasn't forked yet,
+/// which the caller treats as "not busy" — correct, since nothing can
+/// be running before the shell exists.
+fn resolve_shell_pid(handle: &PtyHandle) -> Option<u32> {
+    if let Some(&pid) = handle.shell_pid.get() {
+        return Some(pid);
+    }
+    let pid = libproc::processes::pids_by_type(libproc::processes::ProcFilter::ByParentProcess {
+        ppid: handle.login_pid,
+    })
+    .ok()?
+    .into_iter()
+    .next()?;
+    let _ = handle.shell_pid.set(pid);
+    Some(pid)
+}
+
+fn resolve_process_name(pid: i32) -> String {
+    libproc::proc_pid::name(pid).unwrap_or_else(|_| format!("pid {pid}"))
+}
+
+#[tauri::command]
+pub fn pty_foreground_process(app: AppHandle, rid: u32) -> CommandResult<Option<ForegroundProc>> {
+    Ok(foreground_process_for(&app, rid))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_process_name;
+
+    #[test]
+    fn resolve_process_name_falls_back_for_invalid_pid() {
+        let name = resolve_process_name(2_147_483_647);
+        assert_eq!(name, "pid 2147483647");
+    }
+
+    #[test]
+    fn resolve_process_name_returns_name_for_self() {
+        let pid = std::process::id() as i32;
+        let name = resolve_process_name(pid);
+        assert_ne!(name, format!("pid {pid}"));
     }
 }
