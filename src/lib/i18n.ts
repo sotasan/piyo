@@ -17,13 +17,16 @@ export function pickLanguage(tag: string | null): Supported {
     return (SUPPORTED as readonly string[]).includes(base) ? (base as Supported) : "en";
 }
 
-async function pushQuitStrings(): Promise<void> {
-    if (platform() !== "macos") return;
-    await setQuitDialogStrings({
+function pushQuitStrings(): Promise<void> {
+    return setQuitDialogStrings({
         title: i18next.t("dialogs.quit.title"),
         body: i18next.t("dialogs.quit.body"),
         ok: i18next.t("dialogs.quit.ok"),
         cancel: i18next.t("dialogs.quit.cancel"),
+    }).catch((e: unknown) => {
+        // Quit dialog is macOS-only; on failure, applicationShouldTerminate
+        // sees empty strings and quits silently — log so we notice.
+        console.error("push quit strings failed", e);
     });
 }
 
@@ -39,8 +42,10 @@ export async function initI18n(tag: string | null): Promise<unknown> {
         fallbackLng: "en",
         interpolation: { escapeValue: false },
     });
-    await pushQuitStrings();
-    i18next.on("languageChanged", () => void pushQuitStrings());
+    if (platform() === "macos") {
+        await pushQuitStrings();
+        i18next.on("languageChanged", () => void pushQuitStrings());
+    }
     return ret;
 }
 
