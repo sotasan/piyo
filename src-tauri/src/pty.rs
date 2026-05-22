@@ -281,7 +281,7 @@ pub async fn pty_spawn(
         let mut session = match Session::new(cols, rows) {
             Ok(s) => s,
             Err(e) => {
-                tracing::error!("vt session init failed: {e:#}");
+                log::error!("vt session init failed: {e:#}");
                 return;
             }
         };
@@ -309,7 +309,7 @@ pub async fn pty_spawn(
                         }
                         Ok(None) => {}
                         Err(e) => {
-                            tracing::warn!("vt feed failed: {e:#}");
+                            log::warn!("vt feed failed: {e:#}");
                         }
                     }
                 }
@@ -320,7 +320,7 @@ pub async fn pty_spawn(
                     cell_height_px,
                 } => {
                     if let Err(e) = session.resize(cols, rows, cell_width_px, cell_height_px) {
-                        tracing::warn!("vt resize failed: {e:#}");
+                        log::warn!("vt resize failed: {e:#}");
                     }
                 }
                 SessionMsg::Shutdown => break,

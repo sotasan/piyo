@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { error } from "@tauri-apps/plugin-log";
 import { useEffect } from "react";
 
 import { ptyForegroundProcess } from "@/ipc/commands";
@@ -57,7 +58,7 @@ export function useTabsLifecycle(): void {
             }
 
             await useTabsStore.getState().spawn(null);
-        })().catch((e) => console.error("tabs lifecycle startup failed", e));
+        })().catch((e) => error(`tabs lifecycle startup failed: ${e}`));
 
         return () => {
             cancelled = true;
