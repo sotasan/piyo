@@ -51,11 +51,13 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
 
     public activate(term: Terminal): void {
         this._textarea = term.textarea ?? null;
+        this._textarea?.addEventListener("keydown", this._onKeyDown, true);
         this._textarea?.addEventListener("compositionstart", this._onCompositionStart, true);
         this._textarea?.addEventListener("compositionend", this._onCompositionEnd, true);
     }
 
     public dispose(): void {
+        this._textarea?.removeEventListener("keydown", this._onKeyDown, true);
         this._textarea?.removeEventListener("compositionstart", this._onCompositionStart, true);
         this._textarea?.removeEventListener("compositionend", this._onCompositionEnd, true);
         this._textarea = null;
@@ -66,13 +68,6 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
 
     /** Returns `true` if the event was handled — caller should suppress xterm. */
     public handle(e: KeyboardEvent): boolean {
-        // Note dead-key keydowns as they happen so compositionend can tell
-        // a dead-key cancellation from any other composition commit. On
-        // WebKit this keydown fires AFTER compositionstart but before
-        // compositionend, so the flag is set in time.
-        if (e.type === "keydown" && (e.key === "Dead" || e.key === "AltGraph")) {
-            this._deadKeyDownSeen = true;
-        }
         if (
             e.type === "keypress" &&
             this._wasDead &&
@@ -95,6 +90,20 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
         }
         return false;
     }
+
+    private _onKeyDown = (e: Event): void => {
+        // Note dead-key keydowns as they happen so compositionend can tell
+        // a dead-key cancellation from any other composition commit. On
+        // WebKit this keydown fires AFTER compositionstart but before
+        // compositionend, so the flag is set in time. Lives in a dedicated
+        // listener (not in handle()) so detection survives any future
+        // refactor of the host's customKeyEventHandler that might skip
+        // handle() under some condition.
+        const ke = e as KeyboardEvent;
+        if (ke.key === "Dead" || ke.key === "AltGraph") {
+            this._deadKeyDownSeen = true;
+        }
+    };
 
     private _onCompositionStart = (): void => {
         // Reset per-composition state. Also wipes any stale dead-key
