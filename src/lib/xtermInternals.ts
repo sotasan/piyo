@@ -39,6 +39,9 @@ type Core = {
     _renderService?: {
         dimensions?: { css?: { cell?: { width: number; height: number } } };
     };
+    coreService?: {
+        triggerDataEvent: (data: string, wasUserInput: boolean) => void;
+    };
 };
 
 function core(term: Terminal): Core {
@@ -59,4 +62,10 @@ export function getCellPx(term: Terminal): { width: number; height: number } {
         width: Math.max(1, Math.round(cell?.width ?? 0)),
         height: Math.max(1, Math.round(cell?.height ?? 0)),
     };
+}
+
+/** Fire xterm's internal data event so onData/onUserInput/scroll-on-input
+ *  observers see the byte, as if xterm itself had produced it. */
+export function triggerDataEvent(term: Terminal, data: string): void {
+    core(term).coreService?.triggerDataEvent(data, true);
 }

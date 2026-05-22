@@ -14,11 +14,12 @@ import { Terminal as XtermTerminal } from "@xterm/xterm";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import "@xterm/xterm/css/xterm.css";
-import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
+import { getConfig, ptyWrite } from "@/ipc/commands";
 import { i18next } from "@/lib/i18n";
 import { WebKitDeadKeyAddon } from "@/lib/xtermDeadKey";
-import { applyFrame, KIND_BYTES, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
 import { handleKey } from "@/lib/xtermInput";
+import { triggerDataEvent } from "@/lib/xtermInternals";
+import { PtyBridgeAddon } from "@/lib/xtermPtyBridge";
 import { useTabsStore } from "@/stores/tabs";
 import { useThemeStore } from "@/stores/theme";
 
@@ -30,22 +31,6 @@ function fontStack(family: string): string {
         .filter(Boolean)
         .map((f) => (f.includes(" ") ? `'${f}'` : f))
         .join(", ");
-}
-
-function getCellPx(term: XtermTerminal): { width: number; height: number } {
-    const cell = (
-        term as unknown as {
-            _core?: {
-                _renderService?: {
-                    dimensions?: { css?: { cell?: { width: number; height: number } } };
-                };
-            };
-        }
-    )._core?._renderService?.dimensions?.css?.cell;
-    return {
-        width: Math.max(1, Math.round(cell?.width ?? 0)),
-        height: Math.max(1, Math.round(cell?.height ?? 0)),
-    };
 }
 
 type UseXtermOptions = {
@@ -85,7 +70,6 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
         const ac = new AbortController();
         const cleanups: Array<() => void> = [];
-        let unsubChannel: (() => void) | undefined;
 
         (async () => {
             const config = await getConfig();
@@ -118,22 +102,10 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             });
 
             // Construct now so the custom key handler can close over it; load
-            // after term.open() since activate() reads term.textarea.
-            // The emit callback routes through xterm's internal data event so
-            // term.onData, scroll-on-user-input, and the a11y announce path
-            // all fire — same as if xterm itself had produced the byte.
-            const deadKey = new WebKitDeadKeyAddon((data) => {
-                const core = (
-                    term as unknown as {
-                        _core: {
-                            coreService: {
-                                triggerDataEvent: (data: string, wasUserInput: boolean) => void;
-                            };
-                        };
-                    }
-                )._core;
-                core.coreService.triggerDataEvent(data, true);
-            });
+            // after term.open() since activate() reads term.textarea. Emit
+            // through xterm's internal data event so onData / scroll-on-input
+            // / a11y observers all fire — same as if xterm produced the byte.
+            const deadKey = new WebKitDeadKeyAddon((data) => triggerDataEvent(term, data));
 
             term.attachCustomKeyEventHandler((event) => {
                 if (deadKey.handle(event)) return false;
@@ -224,38 +196,7 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             fit.fit();
             ro.observe(container);
 
-            unsubChannel = useTabsStore.getState().subscribeToTab(rid, (event) => {
-                if (ac.signal.aborted) return;
-                const kind = new DataView(event).getUint8(0);
-                if (kind === KIND_BYTES) {
-                    // Raw PTY bytes — feed xterm.js's parser so modes, OSC,
-                    // APC kitty graphics (addon-image), kitty keyboard,
-                    // title, and bell all keep working.
-                    term.write(new Uint8Array(event, 1));
-                } else if (kind === KIND_FRAME) {
-                    // term.write() queues parsing onto the next tick. If we
-                    // ran applyFrame synchronously here, line.getFg/getBg
-                    // would return stale attrs (xterm.js hasn't parsed the
-                    // chunk's SGR sequences yet) and moving the cursor to
-                    // ghostty's position would desync xterm.js's parser
-                    // — its later writes would land at the wrong cells.
-                    // Defer via the write callback so xterm.js drains
-                    // first, then ghostty overwrites codepoints in place.
-                    term.write("", () => applyFrame(term, event));
-                } else if (kind === KIND_EXIT) {
-                    term.write(`\r\n${i18next.t("terminal.processExited")}\r\n`);
-                }
-            });
-
-            term.onData((data) => void ptyWrite(rid, data));
-            term.onResize(({ cols, rows }) => {
-                const cell = getCellPx(term);
-                void ptyResize(rid, cols, rows, cell.width, cell.height);
-                emitResize(cols, rows);
-            });
-
-            const initialCell = getCellPx(term);
-            void ptyResize(rid, term.cols, term.rows, initialCell.width, initialCell.height);
+            term.loadAddon(new PtyBridgeAddon(rid, (cols, rows) => emitResize(cols, rows)));
 
             focusIfActive(term);
         })().catch((e) => {
@@ -267,7 +208,6 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
         return () => {
             ac.abort();
-            unsubChannel?.();
             for (const c of cleanups.reverse()) c();
         };
     }, [rid]);
