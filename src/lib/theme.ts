@@ -1,3 +1,4 @@
+import { warn } from "@tauri-apps/plugin-log";
 import type { ITheme } from "@xterm/xterm";
 import { bundledThemes, type BundledTheme } from "shiki";
 
@@ -64,7 +65,7 @@ async function loadTheme(name: string): Promise<ShikiTheme> {
         try {
             return JSON.parse(userJson) as ShikiTheme;
         } catch (err) {
-            console.warn(`piyo: user theme "${name}" is not valid JSON; falling back`, err);
+            warn(`user theme "${name}" is not valid JSON; falling back: ${err}`);
         }
     }
 
@@ -120,7 +121,7 @@ export async function applyTheme(name: string): Promise<void> {
     root.style.colorScheme = mode;
 
     await setWindowAppearance(mode).catch((err: unknown) => {
-        console.warn("piyo: failed to set native window appearance", err);
+        warn(`failed to set native window appearance: ${err}`);
     });
 
     useThemeStore.getState().set({
