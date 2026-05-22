@@ -36,5 +36,25 @@
         "selectPrevTab": "Vorherigen Tab auswählen",
         "selectNextTab": "Nächsten Tab auswählen",
         "showTab": "Tab {{index}} anzeigen"
+    },
+    "dialogs": {
+        "closeTab": {
+            "title": "Tab schließen?",
+            "body": "{{name}} läuft noch. Wenn Sie diesen Tab schließen, wird der Prozess beendet.",
+            "ok": "Schließen",
+            "cancel": "Abbrechen"
+        },
+        "closeWindow": {
+            "title": "Fenster schließen?",
+            "body": "Alle Terminal-Sitzungen in diesem Fenster werden beendet.",
+            "ok": "Schließen",
+            "cancel": "Abbrechen"
+        },
+        "quit": {
+            "title": "Piyo beenden?",
+            "body": "Alle Terminal-Sitzungen werden beendet.",
+            "ok": "Beenden",
+            "cancel": "Abbrechen"
+        }
     }
 }

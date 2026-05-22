@@ -2256,6 +2256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libproc"
+version = "0.14.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a54ad7278b8bc5301d5ffd2a94251c004feb971feba96c971ea4063645990757"
+dependencies = [
+ "bindgen",
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2969,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "piyo"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -2980,6 +2991,7 @@ dependencies = [
  "config",
  "etcetera",
  "libghostty-vt",
+ "libproc",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",

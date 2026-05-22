@@ -13,6 +13,7 @@ fn main() {
 
         cc::Build::new()
             .file("src/macos/context_menu.m")
+            .file("src/macos/quit_handler.m")
             .file("src/macos/refresh_rate.m")
             .file("src/macos/system_appearance.m")
             .flag("-fobjc-arc")
@@ -22,6 +23,7 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=WebKit");
 
         println!("cargo:rerun-if-changed=src/macos/context_menu.m");
+        println!("cargo:rerun-if-changed=src/macos/quit_handler.m");
         println!("cargo:rerun-if-changed=src/macos/refresh_rate.m");
         println!("cargo:rerun-if-changed=src/macos/system_appearance.m");
     }

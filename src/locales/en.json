@@ -36,5 +36,25 @@
         "selectPrevTab": "Select Previous Tab",
         "selectNextTab": "Select Next Tab",
         "showTab": "Show Tab {{index}}"
+    },
+    "dialogs": {
+        "closeTab": {
+            "title": "Close Tab?",
+            "body": "{{name}} is still running. If you close this tab, the process will be terminated.",
+            "ok": "Close",
+            "cancel": "Cancel"
+        },
+        "closeWindow": {
+            "title": "Close Window?",
+            "body": "All terminal sessions in this window will be terminated.",
+            "ok": "Close",
+            "cancel": "Cancel"
+        },
+        "quit": {
+            "title": "Quit Piyo?",
+            "body": "All terminal sessions will be terminated.",
+            "ok": "Quit",
+            "cancel": "Cancel"
+        }
     }
 }
