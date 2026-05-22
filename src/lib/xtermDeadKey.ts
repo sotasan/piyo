@@ -1,12 +1,5 @@
 import type { ITerminalAddon, Terminal } from "@xterm/xterm";
 
-// Standalone forms of macOS dead keys (US International / ABNT / Spanish /
-// French / Czech / etc). When compositionend commits one of these, the
-// dead-key combination was cancelled by a non-combining next char rather
-// than fused into a precomposed glyph — which is the WebKit quirk this
-// addon repairs. Non-exhaustive; extend per-layout as new ones surface.
-const DEAD_KEY_CHARS = new Set(["~", "`", "´", "¨", "^", "¸", "°"]);
-
 /**
  * Repair WebKit's dead-key cancellation quirks on Tauri/WKWebView.
  *
@@ -17,22 +10,36 @@ const DEAD_KEY_CHARS = new Set(["~", "`", "´", "¨", "^", "¸", "°"]);
  * non-combining char (`/`, `l`, …) produces:
  *   1. compositionend with data="~" — xterm's CompositionHelper schedules a
  *      setTimeout that reads the textarea and emits `~`. Correct.
- *   2. A synthetic keypress for the next physical key whose `charCode` is the
- *      dead char (126 for ~) rather than the actual key. xterm's `_keyPress`
- *      reads `charCode` first and emits `~` a second time. We suppress it.
+ *   2. A synthetic keypress for the next physical key whose `charCode` is
+ *      the dead char (126 for ~) rather than the actual key. xterm's
+ *      `_keyPress` reads `charCode` first and emits `~` a second time.
+ *      We suppress it.
  *   3. A keydown for the next physical key whose `event.key` is the
- *      concatenation "~/". xterm's keyboard service requires `key.length===1`
- *      so it ignores the keydown, and the input event is blocked by the
- *      `_keyDownSeen` guard — the actual key gets lost. We emit it directly.
+ *      concatenation "~/". xterm's keyboard service requires
+ *      `key.length===1` so it ignores the keydown, and the input event is
+ *      blocked by the `_keyDownSeen` guard — the actual key gets lost.
+ *      We emit it directly.
  *
- * Chromium-based hosts (Tabby, Hyper) don't see (2)/(3), so xterm.js's stock
- * composition handling works there.
+ * Chromium-based hosts (Tabby, Hyper) don't see (2)/(3), so xterm.js's
+ * stock composition handling works there. On Chromium our detection still
+ * decides `_wasDead=false` (the Dead-keydown reset on `compositionstart`
+ * wipes the marker before `compositionend`), so the suppression /
+ * extraction never fires — which is correct, because the WebKit-specific
+ * event shapes they'd match never appear there either.
+ *
+ * Dead-key detection: observe whether a `keydown` with `event.key ===
+ * "Dead"` (or `"AltGraph"`) fires during the composition lifecycle, *not*
+ * the committed char. Pattern-matching `compositionend.data` against a set
+ * of "known dead chars" is fundamentally wrong because many layouts type
+ * `~`, `^`, `` ` ``, etc. directly without ever going through a dead state
+ * — see @jerch's analysis on the upstream issue.
  *
  * Wire-up: load with `term.loadAddon(...)`, then call `handle(event)` from
  * your `attachCustomKeyEventHandler` callback and return `false` if it
  * returns `true`.
  */
 export class WebKitDeadKeyAddon implements ITerminalAddon {
+    private _deadKeyDownSeen = false;
     private _commit: string | null = null;
     private _wasDead = false;
     private _textarea: HTMLTextAreaElement | null = null;
@@ -52,15 +59,20 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
         this._textarea?.removeEventListener("compositionstart", this._onCompositionStart, true);
         this._textarea?.removeEventListener("compositionend", this._onCompositionEnd, true);
         this._textarea = null;
+        this._deadKeyDownSeen = false;
         this._commit = null;
         this._wasDead = false;
     }
 
     /** Returns `true` if the event was handled — caller should suppress xterm. */
     public handle(e: KeyboardEvent): boolean {
-        // Both branches gate on `_wasDead` so the suppression and extraction
-        // only fire for known dead-key cancellations — never for arbitrary
-        // composition commits (e.g. IME).
+        // Note dead-key keydowns as they happen so compositionend can tell
+        // a dead-key cancellation from any other composition commit. On
+        // WebKit this keydown fires AFTER compositionstart but before
+        // compositionend, so the flag is set in time.
+        if (e.type === "keydown" && (e.key === "Dead" || e.key === "AltGraph")) {
+            this._deadKeyDownSeen = true;
+        }
         if (
             e.type === "keypress" &&
             this._wasDead &&
@@ -85,16 +97,18 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
     }
 
     private _onCompositionStart = (): void => {
-        // A fresh composition begins; drop any state left over from a
-        // previous compositionend whose keypress never arrived (e.g. focus
-        // loss between the dead key and the next physical key).
+        // Reset per-composition state. Also wipes any stale dead-key
+        // marker from a prior composition whose keypress never arrived or
+        // a Dead keydown that didn't lead to a composition.
         this._commit = null;
         this._wasDead = false;
+        this._deadKeyDownSeen = false;
     };
 
     private _onCompositionEnd = (e: Event): void => {
         const data = (e as CompositionEvent).data;
         this._commit = data || null;
-        this._wasDead = !!data && DEAD_KEY_CHARS.has(data);
+        this._wasDead = this._deadKeyDownSeen;
+        this._deadKeyDownSeen = false;
     };
 }
