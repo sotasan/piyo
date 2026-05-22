@@ -118,7 +118,21 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
             // Construct now so the custom key handler can close over it; load
             // after term.open() since activate() reads term.textarea.
-            const deadKey = new WebKitDeadKeyAddon((data) => void ptyWrite(rid, data));
+            // The emit callback routes through xterm's internal data event so
+            // term.onData, scroll-on-user-input, and the a11y announce path
+            // all fire — same as if xterm itself had produced the byte.
+            const deadKey = new WebKitDeadKeyAddon((data) => {
+                const core = (
+                    term as unknown as {
+                        _core: {
+                            coreService: {
+                                triggerDataEvent: (data: string, wasUserInput: boolean) => void;
+                            };
+                        };
+                    }
+                )._core;
+                core.coreService.triggerDataEvent(data, true);
+            });
 
             term.attachCustomKeyEventHandler((event) => {
                 if (deadKey.handle(event)) return false;
