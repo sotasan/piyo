@@ -15,7 +15,7 @@ use tauri::AppHandle;
 
 use crate::pty;
 
-pub static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct QuitStrings {
@@ -81,7 +81,8 @@ extern "C" fn should_terminate() -> bool {
     show_quit_dialog()
 }
 
-pub fn install() {
+pub fn install(app: AppHandle) {
+    let _ = APP_HANDLE.set(app);
     unsafe {
         crate::macos::piyo_install_quit_handler(Some(should_terminate));
     }
