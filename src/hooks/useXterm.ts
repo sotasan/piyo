@@ -1,3 +1,4 @@
+import { error, warn } from "@tauri-apps/plugin-log";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -189,7 +190,7 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             try {
                 term.loadAddon(new LigaturesAddon());
             } catch (e) {
-                console.warn("ligatures addon failed to load", e);
+                warn(`ligatures addon failed to load: ${e}`);
             }
             try {
                 const webgl = new WebglAddon();
@@ -238,7 +239,7 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
             focusIfActive(term);
         })().catch((e) => {
             if (!ac.signal.aborted) {
-                console.error("xterm bootstrap failed", e);
+                error(`xterm bootstrap failed: ${e}`);
                 container.textContent = i18next.t("terminal.processExited");
             }
         });

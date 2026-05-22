@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { attachConsole } from "@tauri-apps/plugin-log";
 import { locale } from "@tauri-apps/plugin-os";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -10,6 +11,8 @@ import { initI18n } from "@/lib/i18n";
 import { applyTheme } from "@/lib/theme";
 import { checkForUpdates } from "@/lib/updater";
 import { applyAccent, subscribeAccent } from "@/stores/accent";
+
+if (import.meta.env.DEV) void attachConsole();
 
 const config = await getConfig();
 const [, , detectedLocale] = await Promise.all([applyTheme(config.theme), applyAccent(), locale()]);

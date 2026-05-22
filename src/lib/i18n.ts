@@ -1,3 +1,4 @@
+import { error } from "@tauri-apps/plugin-log";
 import { platform } from "@tauri-apps/plugin-os";
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
@@ -26,7 +27,7 @@ function pushQuitStrings(): Promise<void> {
     }).catch((e: unknown) => {
         // Quit dialog is macOS-only; on failure, applicationShouldTerminate
         // sees empty strings and quits silently — log so we notice.
-        console.error("push quit strings failed", e);
+        error(`push quit strings failed: ${e}`);
     });
 }
 

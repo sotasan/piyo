@@ -1,4 +1,5 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { error } from "@tauri-apps/plugin-log";
 
 import { i18next } from "@/lib/i18n";
 import { useTabsStore } from "@/stores/tabs";
@@ -64,7 +65,7 @@ export async function installMenu(): Promise<() => void> {
             useTabsStore
                 .getState()
                 .spawnSibling()
-                .catch((e) => console.error("spawn failed", e));
+                .catch((e) => error(`spawn failed: ${e}`));
         },
     });
     const closeTab = await MenuItem.new({
@@ -153,7 +154,7 @@ export async function installMenu(): Promise<() => void> {
 
     const unsub = useTabsStore.subscribe((state, prev) => {
         if (state.tabs !== prev.tabs || state.activeId !== prev.activeId) {
-            refresh().catch((e) => console.error("menu refresh failed", e));
+            refresh().catch((e) => error(`menu refresh failed: ${e}`));
         }
     });
 

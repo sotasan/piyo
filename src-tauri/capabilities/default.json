@@ -11,6 +11,7 @@
         "core:window:allow-destroy",
         "core:window:allow-start-dragging",
         "dialog:default",
+        "log:default",
         "notification:default",
         "opener:default",
         "os:default",
