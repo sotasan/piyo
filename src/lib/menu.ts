@@ -9,7 +9,12 @@ export async function installMenu(): Promise<() => void> {
     const appName = "Piyo";
 
     const aboutItem = await PredefinedMenuItem.new({
-        item: { About: null },
+        item: {
+            About: {
+                credits: "piyo.sh",
+                copyright: "2026 Sōta",
+            },
+        },
         text: t("about", { name: appName }),
     });
     const services = await PredefinedMenuItem.new({ item: "Services" });
