@@ -9,6 +9,9 @@ const DEAD_KEY_CHARS = new Set(["~", "`", "´", "¨", "^"]);
 /**
  * Repair WebKit's dead-key cancellation quirks on Tauri/WKWebView.
  *
+ * Upstream: https://github.com/xtermjs/xterm.js/issues/5894 — remove this
+ * addon once xterm.js handles it natively.
+ *
  * On macOS WKWebView, typing a dead key (e.g. Alt+N for ~) followed by a
  * non-combining char (`/`, `l`, …) produces:
  *   1. compositionend with data="~" — xterm's CompositionHelper schedules a
