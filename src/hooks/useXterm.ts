@@ -15,6 +15,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { getConfig, ptyResize, ptyWrite } from "@/ipc/commands";
 import { i18next } from "@/lib/i18n";
+import { WebKitDeadKeyAddon } from "@/lib/xtermDeadKey";
 import { applyFrame, KIND_BYTES, KIND_EXIT, KIND_FRAME } from "@/lib/xtermGhostty";
 import { handleKey } from "@/lib/xtermInput";
 import { useTabsStore } from "@/stores/tabs";
@@ -115,7 +116,12 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
                 termRef.current = null;
             });
 
+            // Construct now so the custom key handler can close over it; load
+            // after term.open() since activate() reads term.textarea.
+            const deadKey = new WebKitDeadKeyAddon((data) => void ptyWrite(rid, data));
+
             term.attachCustomKeyEventHandler((event) => {
+                if (deadKey.handle(event)) return false;
                 if (event.type === "keydown" && event.metaKey) {
                     if (event.key === "k") {
                         term.clear();
@@ -186,6 +192,7 @@ export function useXterm({ rid, active, onResize, onOpenSearch }: UseXtermOption
 
             term.open(container);
             if (term.element) term.element.style.padding = config.terminal.padding;
+            term.loadAddon(deadKey);
             try {
                 term.loadAddon(new LigaturesAddon());
             } catch (e) {
