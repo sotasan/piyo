@@ -202,7 +202,7 @@ pub async fn pty_spawn(
         .context("failed to spawn shell")?;
     drop(pair.slave);
 
-    let child_pid = child.process_id().unwrap_or(0);
+    let child_pid = child.process_id().context("spawned shell has no pid")?;
 
     let mut reader = pair
         .master
