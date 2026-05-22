@@ -1,10 +1,11 @@
 import type { ITerminalAddon, Terminal } from "@xterm/xterm";
 
-// Standalone forms of macOS dead keys (US International / ABNT / Spanish / etc).
-// When compositionend commits one of these, the dead-key combination was
-// cancelled by a non-combining next char rather than fused into a precomposed
-// glyph — which is the WebKit quirk this addon repairs.
-const DEAD_KEY_CHARS = new Set(["~", "`", "´", "¨", "^"]);
+// Standalone forms of macOS dead keys (US International / ABNT / Spanish /
+// French / Czech / etc). When compositionend commits one of these, the
+// dead-key combination was cancelled by a non-combining next char rather
+// than fused into a precomposed glyph — which is the WebKit quirk this
+// addon repairs. Non-exhaustive; extend per-layout as new ones surface.
+const DEAD_KEY_CHARS = new Set(["~", "`", "´", "¨", "^", "¸", "°"]);
 
 /**
  * Repair WebKit's dead-key cancellation quirks on Tauri/WKWebView.
@@ -43,10 +44,12 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
 
     public activate(term: Terminal): void {
         this._textarea = term.textarea ?? null;
+        this._textarea?.addEventListener("compositionstart", this._onCompositionStart, true);
         this._textarea?.addEventListener("compositionend", this._onCompositionEnd, true);
     }
 
     public dispose(): void {
+        this._textarea?.removeEventListener("compositionstart", this._onCompositionStart, true);
         this._textarea?.removeEventListener("compositionend", this._onCompositionEnd, true);
         this._textarea = null;
         this._commit = null;
@@ -55,8 +58,12 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
 
     /** Returns `true` if the event was handled — caller should suppress xterm. */
     public handle(e: KeyboardEvent): boolean {
+        // Both branches gate on `_wasDead` so the suppression and extraction
+        // only fire for known dead-key cancellations — never for arbitrary
+        // composition commits (e.g. IME).
         if (
             e.type === "keypress" &&
+            this._wasDead &&
             this._commit !== null &&
             e.charCode === this._commit.charCodeAt(0)
         ) {
@@ -76,6 +83,14 @@ export class WebKitDeadKeyAddon implements ITerminalAddon {
         }
         return false;
     }
+
+    private _onCompositionStart = (): void => {
+        // A fresh composition begins; drop any state left over from a
+        // previous compositionend whose keypress never arrived (e.g. focus
+        // loss between the dead key and the next physical key).
+        this._commit = null;
+        this._wasDead = false;
+    };
 
     private _onCompositionEnd = (e: Event): void => {
         const data = (e as CompositionEvent).data;
