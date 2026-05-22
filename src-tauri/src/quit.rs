@@ -60,7 +60,12 @@ fn show_quit_dialog() -> bool {
     alert.setMessageText(&NSString::from_str(&strings.title));
     alert.setInformativeText(&NSString::from_str(&strings.body));
     alert.addButtonWithTitle(&NSString::from_str(&strings.ok));
-    alert.addButtonWithTitle(&NSString::from_str(&strings.cancel));
+    let cancel = alert.addButtonWithTitle(&NSString::from_str(&strings.cancel));
+    // NSAlert auto-binds Esc/Cmd+. only when a button title is literally
+    // "Cancel". With localized titles ("Abbrechen", "キャンセル", …) the
+    // auto-bind misses, so bind Esc explicitly — macOS treats Cmd+. as a
+    // synonym for any button whose key equivalent is Esc.
+    cancel.setKeyEquivalent(&NSString::from_str("\u{1b}"));
     alert.runModal() == NSAlertFirstButtonReturn
 }
 
