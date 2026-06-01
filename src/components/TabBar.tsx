@@ -81,12 +81,12 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                 {...attributes}
                 {...listeners}
                 className={cn(
-                    "group relative w-full h-7 rounded-full",
+                    "group relative w-full h-7 rounded-lg",
                     "flex items-center px-7 text-xs",
-                    "before:content-[''] before:absolute before:inset-0 before:rounded-full",
+                    "before:content-[''] before:absolute before:inset-0 before:rounded-lg",
                     "before:bg-foreground/10 before:opacity-0",
                     isActive
-                        ? "glass bg-foreground/10 text-foreground"
+                        ? "glass bg-foreground/10"
                         : "text-foreground/60 before:transition-opacity before:duration-200 hover:before:opacity-100",
                 )}
             >
@@ -105,7 +105,7 @@ function SortableTab({ tab, isActive, onActivate, onClose }: SortableTabProps) {
                         onClose(tab.id);
                     }}
                     className={cn(
-                        "absolute left-1.5 top-1/2 -translate-y-1/2 z-10",
+                        "absolute right-1.5 top-1/2 -translate-y-1/2 z-10",
                         "size-4 flex items-center justify-center rounded-full",
                         "opacity-0 group-hover:opacity-100",
                         "hover:bg-foreground/15 transition",
