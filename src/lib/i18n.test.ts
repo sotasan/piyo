@@ -10,6 +10,7 @@ describe("pickLanguage", () => {
     test("exact base tags are accepted", () => {
         expect(pickLanguage("en")).toBe("en");
         expect(pickLanguage("de")).toBe("de");
+        expect(pickLanguage("fr")).toBe("fr");
         expect(pickLanguage("ja")).toBe("ja");
         expect(pickLanguage("zh")).toBe("zh");
     });
@@ -17,6 +18,7 @@ describe("pickLanguage", () => {
     test("region-qualified BCP-47 tags reduce to their base", () => {
         expect(pickLanguage("en-US")).toBe("en");
         expect(pickLanguage("de-AT")).toBe("de");
+        expect(pickLanguage("fr-CA")).toBe("fr");
         expect(pickLanguage("zh-Hant-TW")).toBe("zh");
     });
 
@@ -30,7 +32,7 @@ describe("pickLanguage", () => {
     });
 
     test("unsupported locales fall back to english", () => {
-        expect(pickLanguage("fr")).toBe("en");
         expect(pickLanguage("ko-KR")).toBe("en");
+        expect(pickLanguage("es")).toBe("en");
     });
 });
