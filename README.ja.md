@@ -7,7 +7,7 @@
 <p align="center">いちばん心地よいターミナルエミュレーター 🐥</p>
 
 <p align="center">
-    <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | 日本語 | <a href="README.zh.md">简体中文</a>
+    <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | 日本語 | <a href="README.zh.md">简体中文</a>
 </p>
 
 ![Piyo](.github/assets/screenshot.png)

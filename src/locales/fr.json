@@ -1,0 +1,60 @@
+{
+    "palette": {
+        "filesLabel": "Fichiers",
+        "commandsLabel": "Commandes",
+        "filesPlaceholder": "Rechercher des fichiers…",
+        "commandsPlaceholder": "Saisir une commande…",
+        "empty": "Aucun résultat.",
+        "reloadTheme": "Recharger le thème"
+    },
+    "sidebar": {
+        "open": "Ouvrir la barre latérale",
+        "close": "Fermer la barre latérale"
+    },
+    "updates": {
+        "title": "Mise à jour disponible",
+        "prompt": "Piyo {{version}} est disponible. Installer maintenant ?",
+        "install": "Installer",
+        "later": "Plus tard"
+    },
+    "terminal": {
+        "processExited": "[processus terminé]",
+        "searchPlaceholder": "Rechercher dans l'historique…"
+    },
+    "menu": {
+        "file": "Fichier",
+        "edit": "Édition",
+        "view": "Présentation",
+        "window": "Fenêtre",
+        "help": "Aide",
+        "about": "À propos de {{name}}",
+        "hide": "Masquer {{name}}",
+        "quit": "Quitter {{name}}",
+        "zoom": "Zoom",
+        "newTab": "Nouvel onglet",
+        "closeTab": "Fermer l'onglet",
+        "selectPrevTab": "Sélectionner l'onglet précédent",
+        "selectNextTab": "Sélectionner l'onglet suivant",
+        "showTab": "Afficher l'onglet {{index}}"
+    },
+    "dialogs": {
+        "closeTab": {
+            "title": "Fermer l'onglet ?",
+            "body": "{{name}} est toujours en cours d'exécution. Si vous fermez cet onglet, le processus sera arrêté.",
+            "ok": "Fermer",
+            "cancel": "Annuler"
+        },
+        "closeWindow": {
+            "title": "Fermer la fenêtre ?",
+            "body": "Toutes les sessions de terminal de cette fenêtre seront arrêtées.",
+            "ok": "Fermer",
+            "cancel": "Annuler"
+        },
+        "quit": {
+            "title": "Quitter Piyo ?",
+            "body": "Toutes les sessions de terminal seront arrêtées.",
+            "ok": "Quitter",
+            "cancel": "Annuler"
+        }
+    }
+}
