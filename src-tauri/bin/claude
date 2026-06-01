@@ -6,36 +6,45 @@
 #      OSC 7496 notification straight to the terminal — the hook runs as
 #      a child of claude with no controlling tty, so /dev/tty fails for
 #      it (the parent shim still uses /dev/tty fine for its own writes).
-#   3. Enable Claude Code's built-in Ghostty-style notification channel
-#      so *Notification* events (permission prompts etc.) arrive as
-#      OSC sequences that piyo's host turns into native OS notifications.
-#      preferredNotifChannel doesn't cover Stop, hence the hook below.
+#   3. Masquerade as Ghostty (TERM_PROGRAM) so claude enables three
+#      ghostty-gated features that piyo actually supports: OSC 9;4
+#      progress reports (drive the tab loading spinner), the OSC 777
+#      notification channel (permission prompts etc. -> native OS
+#      notifications), and pushing kitty keyboard mode 1 itself so
+#      Shift+Enter reads as a distinct key. All three are gated on
+#      TERM_PROGRAM==="ghostty" plus a version floor (see ykH/qM3 in
+#      claude's bundle), so the version is faked high enough to clear the
+#      >=1.2.0 check. Scoped to this shim so the rest of the session
+#      still reports TERM_PROGRAM=piyo. With the spoof, claude's "auto"
+#      notif channel resolves to ghostty on its own (no
+#      preferredNotifChannel needed) and claude pushes/pops the kitty
+#      protocol itself (verified — under TERM_PROGRAM=piyo it does not,
+#      so the shim used to push it manually; now it doesn't need to,
+#      which means Shift+Enter rides on this spoof too). The Stop event
+#      is covered by none of this, hence the hook below.
 #   4. Wire a Stop hook that forwards Claude's turn-end JSON inside an
 #      OSC 7496 sequence — piyo's OSC parser extracts the last assistant
 #      message and fires a native OS notification. Newlines are stripped
 #      from the payload so xterm.js doesn't treat them as a sequence
 #      terminator and leak the trailing BEL onto the screen.
-#   5. Push kitty keyboard mode 1 for the duration of claude — claude
-#      relies on the disambiguated encoding to see Shift+Enter as a
-#      distinct key. The shell init doesn't push it (would rewrite
-#      Ctrl+C as CSI-u and break SIGINT for cooked-mode commands like
-#      `tree`), so the shim does it itself and pops on every exit path.
-#   6. Enable monitor mode so claude becomes its own pgrp leader and the
-#      tty's foreground pgrp. Without it the shim's sh stays as the pgrp
-#      leader and piyo's close-confirmation dialog reports the foreground
-#      process as "sh"/"bash" instead of "claude". `exec` would solve it
-#      too but kills the trap below.
+#   5. exec into claude rather than running it as a child, so claude
+#      inherits the shim's pid and is the tty's foreground pgrp leader —
+#      otherwise piyo's close-confirmation dialog reports the foreground
+#      process as "sh"/"bash" instead of "claude". The codex shim hands
+#      off the same way. The TERM_PROGRAM spoof is exported just above
+#      the exec — only claude and its children inherit it, never the
+#      parent shell (an inline `VAR=val exec` prefix is unreliable per
+#      POSIX, hence export rather than a prefix).
 self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
+
 PIYO_TTY=$(tty 2>/dev/null) || PIYO_TTY=/dev/tty
 export PIYO_TTY
 
-set -m
-trap 'printf "\033[<u" > /dev/tty 2>/dev/null' EXIT TERM HUP
-printf '\033[>1u' > /dev/tty 2>/dev/null
+export TERM_PROGRAM=ghostty
+export TERM_PROGRAM_VERSION=1.2.0
 
-claude --settings '{
-    "preferredNotifChannel": "ghostty",
+exec claude --settings '{
     "hooks": {
         "Stop": [{
             "hooks": [{
