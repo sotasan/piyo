@@ -27,9 +27,7 @@ bitflags = { version = "2", features = ["serde"] }
 cached = "1"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 etcetera = "0.11"
-libghostty-vt = { git = "https://github.com/uzaaft/libghostty-rs", branch = "master", features = [
-    "link-static",
-] }
+libghostty-vt = { git = "https://github.com/uzaaft/libghostty-rs", rev = "9bf2bd297b8aef1f5c0dc01b674cc456bf2a3b3b" }
 percent-encoding = "2"
 portable-pty = "0.9"
 pulldown-cmark = "0.13"
