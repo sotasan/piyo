@@ -10,6 +10,7 @@
 # to a plain codex exec so the user still gets a working CLI.
 self_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 PATH=$(printf %s "$PATH" | tr : '\n' | grep -vxF "$self_dir" | paste -sd: -)
+
 if [ -x "${PIYO_SCRIPTS-}/codex-notify" ]; then
     exec codex -c "notify=['$PIYO_SCRIPTS/codex-notify']" "$@"
 fi
