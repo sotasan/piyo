@@ -1,0 +1,8 @@
+[submodule "vendor/zmx"]
+	path = vendor/zmx
+	url = https://github.com/neurosnap/zmx
+	shallow = true
+[submodule "vendor/ghostty"]
+	path = vendor/ghostty
+	url = https://github.com/ghostty-org/ghostty
+	shallow = true

@@ -1,9 +1,0 @@
-{
-    "extends": "@tsconfig/vite-react/tsconfig.json",
-    "compilerOptions": {
-        "paths": { "@/*": ["./src/*"] },
-        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-        "types": ["bun", "vite/client"]
-    },
-    "include": ["src"]
-}
