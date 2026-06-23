@@ -1,7 +1,26 @@
-[env]
-_.file = [".env.{{ os() }}", ".env.local"]
-
+# Swift comes from Xcode. Zig builds the bundled zmx multiplexer.
 [tools]
-bun = "latest"
-rust = "stable"
-zig = "0.15"
+xcodegen = "latest"
+zig = "0.15.2"
+
+[tasks.setup]
+description = "One-time: init submodules + build zmx + generate the app icon"
+run = [
+    "git submodule update --init",
+    "./scripts/build-zmx.sh",
+    "./scripts/build-icon.sh",
+]
+
+[tasks.gen]
+description = "Generate the Xcode project from project.yml"
+run = "xcodegen generate"
+
+[tasks.build]
+description = "Build Piyo.app"
+depends = ["gen"]
+run = "xcodebuild -project Piyo.xcodeproj -scheme Piyo -configuration Debug -derivedDataPath .build-xcode build"
+
+[tasks.dev]
+description = "Build and open Piyo.app"
+depends = ["build"]
+run = "open .build-xcode/Build/Products/Debug/Piyo.app"

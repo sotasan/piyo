@@ -1,5 +1,19 @@
-dist
-node_modules
 .DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# zmx multiplexer (built from the vendor/zmx submodule)
+/Resources/bin/
+
+# Generated Xcode project + build output (xcodegen / xcodebuild)
+/Piyo.xcodeproj/
+/.build-xcode/
+# Generated AppIcon sizes (scripts/build-icon.sh; source is assets/icon.icns)
+/Piyo/Assets.xcassets/AppIcon.appiconset/*.png
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
 .env.local
-*~lock~
