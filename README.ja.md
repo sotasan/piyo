@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="src-tauri/icons/128x128@2x.png" alt="Piyo" width="128" height="128">
+    <img src="assets/icon.png" alt="Piyo" width="128" height="128">
 </p>
 
 <h1 align="center">Piyo</h1>
