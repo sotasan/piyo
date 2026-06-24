@@ -1,4 +1,3 @@
-# Swift comes from Xcode. Zig builds the bundled zmx multiplexer.
 [tools]
 xcodegen = "latest"
 zig = "0.15.2"
