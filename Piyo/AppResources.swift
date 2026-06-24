@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Locates bundled runtime resources (zmx, ghostty shell-integration) inside the
@@ -33,17 +34,29 @@ enum AppResources {
         return FileManager.default.isReadableFile(atPath: marker) ? resources : nil
     }
 
-    /// The command ghostty execs: `env … zmx attach <session>`.
+    /// A stable zmx session name for a worktree directory's tab, e.g. `piyo-1a2b3c…`
+    /// (tab 0) or `piyo-1a2b3c…-2`. Derived from a SHA-256 of the path (Swift's
+    /// `hashValue` is randomized per process, so it can't be used) — same
+    /// directory+tab always maps to the same session, so each tab keeps its own
+    /// persistent terminal. Tab 0 has no suffix so existing sessions keep working.
+    static func sessionName(for directory: String, tab: Int = 0) -> String {
+        let hex = SHA256.hash(data: Data(directory.utf8))
+            .prefix(6).map { String(format: "%02x", Int($0)) }.joined()
+        return tab == 0 ? "piyo-\(hex)" : "piyo-\(hex)-\(tab)"
+    }
+
+    /// The command ghostty execs for a worktree: `cd <dir> && env … zmx attach <session>`.
     ///
     /// The environment is set inline with `/usr/bin/env` (not ghostty's `env`
     /// config, which doesn't reach the spawned shell here): `-u …` clears any
     /// inherited zmx session vars (else `attach` targets the wrong session),
     /// `ZMX_DIR` isolates the session, and the `GHOSTTY_*`/`ZDOTDIR` vars
-    /// activate ghostty's zsh shell integration through zmx.
+    /// activate ghostty's zsh shell integration through zmx. The leading `cd`
+    /// only affects a session's first creation; later attaches reuse it.
     ///
     /// Paths are double-quoted: ghostty runs this through `bash -c`/`/bin/sh -c`,
-    /// so shell quoting handles spaces in the bundle path or `$TMPDIR`.
-    static var terminalCommand: String {
+    /// so shell quoting handles spaces in the directory, bundle path, or `$TMPDIR`.
+    static func terminalCommand(directory: String, session: String) -> String {
         var parts = [
             "/usr/bin/env", "-u", "ZMX_SESSION", "-u", "ZMX_SESSION_PREFIX",
             "ZMX_DIR=\"\(zmxDir)\"",
@@ -55,7 +68,7 @@ enum AppResources {
                 "GHOSTTY_SHELL_FEATURES=cursor,title",
             ]
         }
-        parts += ["\"\(zmx)\"", "attach", "piyo-main"]
-        return parts.joined(separator: " ")
+        parts += ["\"\(zmx)\"", "attach", session]
+        return "cd \"\(directory)\" && \(parts.joined(separator: " "))"
     }
 }
