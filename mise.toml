@@ -4,6 +4,3 @@ zig = "0.15.2"
 
 [tasks.setup]
 run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh"]
-
-[tasks.generate]
-run = "xcodegen generate"
