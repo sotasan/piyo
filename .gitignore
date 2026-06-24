@@ -17,3 +17,6 @@ xcuserdata/
 *.xcuserstate
 
 .env
+
+# SourceKit-LSP build server config (machine-local, absolute DerivedData path)
+buildServer.json
