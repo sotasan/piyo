@@ -1,9 +1,16 @@
+[settings]
+experimental = true
+
+[tools]
+lefthook = "latest"
+xcodegen = "latest"
+zig = "0.15.2"
+
 [env]
 _.file = ".env"
 
-[tools]
-xcodegen = "latest"
-zig = "0.15.2"
+[hooks]
+postinstall = "lefthook install"
 
 [tasks.setup]
 run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh"]
