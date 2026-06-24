@@ -45,7 +45,7 @@ Téléchargez la dernière version depuis la [page des versions](https://github.
 git clone --recursive https://github.com/sotasan/piyo.git
 cd piyo
 mise install
-mise setup
+mise run setup
 xcodegen generate
 ```
 

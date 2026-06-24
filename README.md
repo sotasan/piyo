@@ -45,7 +45,7 @@ Download the latest release from the [releases page](https://github.com/sotasan/
 git clone --recursive https://github.com/sotasan/piyo.git
 cd piyo
 mise install
-mise setup
+mise run setup
 xcodegen generate
 ```
 
