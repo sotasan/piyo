@@ -39,6 +39,16 @@ brew install --cask sotasan/tap/piyo
 
 Lade die neueste Version von der [Releases-Seite](https://github.com/sotasan/piyo/releases/latest) herunter.
 
+## Entwicklung
+
+```sh
+git clone --recursive https://github.com/sotasan/piyo.git
+cd piyo
+mise install
+mise setup
+xcodegen generate
+```
+
 ## Lizenz
 
 [MIT](LICENSE)
