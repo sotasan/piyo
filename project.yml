@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 
 packages:
   libghostty-spm:

@@ -2,8 +2,9 @@ import CryptoKit
 import Foundation
 
 /// Locates bundled runtime resources (zmx, ghostty shell-integration) inside the
-/// app bundle's `Contents/Resources`, and builds the terminal command.
-enum AppResources {
+/// app bundle's `Contents/Resources`, and builds the command ghostty execs for a
+/// worktree's terminal.
+enum TerminalCommand {
     /// The app bundle's `Contents/Resources` directory.
     private static var resources: String {
         Bundle.main.resourceURL?.path ?? FileManager.default.currentDirectoryPath
@@ -56,7 +57,7 @@ enum AppResources {
     ///
     /// Paths are double-quoted: ghostty runs this through `bash -c`/`/bin/sh -c`,
     /// so shell quoting handles spaces in the directory, bundle path, or `$TMPDIR`.
-    static func terminalCommand(directory: String, session: String) -> String {
+    static func build(directory: String, session: String) -> String {
         var parts = [
             "/usr/bin/env", "-u", "ZMX_SESSION", "-u", "ZMX_SESSION_PREFIX",
             "ZMX_DIR=\"\(zmxDir)\"",

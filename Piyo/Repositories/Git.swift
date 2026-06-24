@@ -2,14 +2,6 @@ import Foundation
 import SwiftGitX
 import libgit2
 
-/// One worktree of a git repository: its working-directory path and the short
-/// name of the branch it has checked out (`"(detached)"` when HEAD isn't a branch).
-struct Worktree: Identifiable, Hashable {
-    let path: String
-    let branch: String
-    var id: String { path }
-}
-
 /// Git access for the sidebar. Opening a repo and reading its working directory
 /// and HEAD branch go through SwiftGitX's Swift API; the two things SwiftGitX
 /// has no API for — discovering a repo's toplevel from a subdirectory, and
