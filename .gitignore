@@ -16,4 +16,4 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
-.env.local
+.env
