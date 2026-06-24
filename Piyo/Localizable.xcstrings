@@ -1,0 +1,86 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Add a repository with the + button." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Füge mit der Plus-Schaltfläche ein Repository hinzu." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajoutez un dépôt avec le bouton +." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "+ ボタンでリポジトリを追加します。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 + 按钮添加仓库。" } }
+      }
+    },
+    "Add Repository" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Repository hinzufügen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajouter un dépôt" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リポジトリを追加" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加仓库" } }
+      }
+    },
+    "Close Tab" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Tab schließen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fermer l'onglet" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タブを閉じる" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭标签页" } }
+      }
+    },
+    "Couldn't add repository" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Repository konnte nicht hinzugefügt werden" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible d'ajouter le dépôt" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リポジトリを追加できませんでした" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法添加仓库" } }
+      }
+    },
+    "New Tab" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neuer Tab" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouvel onglet" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新規タブ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建标签页" } }
+      }
+    },
+    "No Worktree Selected" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Worktree ausgewählt" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun worktree sélectionné" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワークツリーが選択されていません" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未选择工作树" } }
+      }
+    },
+    "Not a git repository." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Git-Repository." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce n'est pas un dépôt git." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Git リポジトリではありません。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不是 Git 仓库。" } }
+      }
+    },
+    "Pick a worktree from the sidebar." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle einen Worktree in der Seitenleiste aus." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez un worktree dans la barre latérale." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドバーからワークツリーを選択してください。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择一个工作树。" } }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Entfernen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "削除" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
+      }
+    },
+    "Terminal %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Terminal %lld" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Terminal %lld" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ターミナル %lld" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "终端 %lld" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

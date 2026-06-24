@@ -1,14 +1,6 @@
 import Foundation
 import Observation
 
-/// A git repository the user has added to the sidebar, identified by its
-/// working-directory root (the main worktree's path).
-struct Repo: Identifiable, Hashable {
-    let path: String
-    var id: String { path }
-    var name: String { (path as NSString).lastPathComponent }
-}
-
 /// The sidebar's model: the added repositories (their paths persisted in
 /// `UserDefaults`) and a cache of each one's worktrees, discovered via `Git` on
 /// launch and whenever a repo is added.
@@ -60,7 +52,9 @@ final class RepoStore {
     /// show the user on failure, nil on success (or if already present).
     @discardableResult
     func add(folder: String) -> String? {
-        guard let top = Git.resolveToplevel(folder) else { return "Not a git repository." }
+        guard let top = Git.resolveToplevel(folder) else {
+            return String(localized: "Not a git repository.")
+        }
         guard !repos.contains(where: { $0.path == top }) else { return nil }
         let repo = Repo(path: top)
         repos.append(repo)
