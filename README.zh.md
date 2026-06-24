@@ -10,6 +10,11 @@
     <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | 简体中文
 </p>
 
+> [!WARNING]
+> **这是 Piyo 用原生 Swift 从零重写的早期开发版本。**
+> 它不是已发布的应用，并且会经常变动。
+> 如需稳定版本，请见 [安装](#安装)。
+
 ![Piyo](.github/assets/screenshot.png)
 
 ## 功能特性
