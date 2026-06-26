@@ -12,8 +12,8 @@
 
 > [!WARNING]
 > **This is an early, in-development version of Piyo, rebuilt from scratch in
-> native Swift.** It's not the released app, and it changes constantly. For a
-> stable build, see [Installation](#installation).
+> SwiftUI and Rust.** It's not the released app, and it changes constantly. For
+> a stable build, see [Installation](#installation).
 
 ![Piyo](.github/assets/screenshot.png)
 

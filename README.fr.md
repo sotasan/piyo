@@ -12,7 +12,7 @@
 
 > [!WARNING]
 > **Ceci est une version préliminaire et en cours de développement de Piyo,
-> reconstruite de zéro en Swift natif.** Ce n'est pas l'application publiée, et
+> reconstruite de zéro en SwiftUI et Rust.** Ce n'est pas l'application publiée, et
 > elle change constamment. Pour une version stable, voir
 > [Installation](#installation).
 
