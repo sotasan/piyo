@@ -2,14 +2,14 @@ name: Piyo
 options:
   bundleIdPrefix: sh.piyo
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   developmentLanguage: en
 
 packages:
   libghostty-spm:
     url: https://github.com/Lakr233/libghostty-spm.git
-    from: "1.2.0"
+    from: "1.2.7"
   libgit2:
     url: https://github.com/ibrahimcetin/libgit2.git
     exactVersion: 1.9.2
