@@ -25,3 +25,6 @@ buildServer.json
 # Added by cargo
 
 /target
+
+# Local sqlx dev database (regenerable from migrations/ — the .sqlx/ query cache IS committed)
+/.db/
