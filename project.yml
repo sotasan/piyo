@@ -59,6 +59,11 @@ targets:
               product: GhosttyTerminal
         settings:
             base:
+                # arm64 only: the Rust pre-build runs `cargo build --release`, which
+                # builds the host arch alone — a universal (Release default) link fails
+                # on the arm64-only libpiyo.a. For an Intel/universal build, make the
+                # cargo step lipo both targets instead.
+                ARCHS: arm64
                 PRODUCT_BUNDLE_IDENTIFIER: sh.piyo
                 MARKETING_VERSION: "0.1.0"
                 CURRENT_PROJECT_VERSION: "1"

@@ -1,3 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+
+# LTO dead-strips the unused bulk of gix/diesel/tokio: 26MB -> 12MB stripped.
+[profile.release]
+lto = true
