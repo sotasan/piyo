@@ -50,6 +50,7 @@ brew install --cask sotasan/tap/piyo
 git clone --recursive https://github.com/sotasan/piyo.git
 cd piyo
 mise install
+bun install
 mise run setup
 xcodegen generate
 ```

@@ -51,6 +51,7 @@ Lade die neueste Version von der [Releases-Seite](https://github.com/sotasan/piy
 git clone --recursive https://github.com/sotasan/piyo.git
 cd piyo
 mise install
+bun install
 mise run setup
 xcodegen generate
 ```
