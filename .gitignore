@@ -1,11 +1,6 @@
 .DS_Store
 
-# build output
-dist/
-# generated types
-.astro/
-
-# dependencies
+# dependencies (bun installs at the workspace root)
 node_modules/
 
 # Swift Package Manager
@@ -18,8 +13,6 @@ node_modules/
 # Generated Xcode project + build output (xcodegen / xcodebuild)
 /Piyo.xcodeproj/
 /.build-xcode/
-# Generated AppIcon sizes (scripts/build-icon.sh; source is assets/icon.icns)
-/Piyo/Assets.xcassets/AppIcon.appiconset/*.png
 DerivedData/
 xcuserdata/
 *.xcuserstate
@@ -29,10 +22,5 @@ xcuserdata/
 # SourceKit-LSP build server config (machine-local, absolute DerivedData path)
 buildServer.json
 
-
-# Added by cargo
-
+# cargo workspace build output
 /target
-
-# Local sqlx dev database (regenerable from migrations/ — the .sqlx/ query cache IS committed)
-/.db/

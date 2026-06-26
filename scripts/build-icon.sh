@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SRC="assets/icon.icns"
-OUT="Piyo/Assets.xcassets/AppIcon.appiconset"
+OUT="apps/desktop/Sources/Assets.xcassets/AppIcon.appiconset"
 TMP="$(mktemp -d)/AppIcon.iconset"
 
 iconutil -c iconset "$SRC" -o "$TMP"

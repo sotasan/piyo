@@ -3,7 +3,7 @@ pre-commit:
     jobs:
         - name: astro-check
           glob: "*.{astro,ts,tsx,mts,cts,mdx,md}"
-          run: bun run check
+          run: bun run -F @piyo/web check
 
         - name: clippy
           glob: "*.rs"
@@ -18,16 +18,22 @@ pre-commit:
           run: bun run lint --deny-warnings {staged_files}
 
         - name: swiftformat
+          # root: .swiftformat config lives in apps/desktop
+          root: "apps/desktop/"
           glob: "*.swift"
           run: swiftformat --lint {staged_files}
 
         - name: swiftlint
+          # root: .swiftlint.yml config lives in apps/desktop
+          root: "apps/desktop/"
           glob: "*.swift"
           run: swiftlint lint --strict --quiet {staged_files}
 
         - name: diesel-schema
           # Fail if src/schema.rs is out of sync with the migrations (regenerate
           # with `mise run db:prepare`). Hermetic: checks against a throwaway temp DB.
+          # root: diesel.toml lives in crates/core; glob is relative to it.
+          root: "crates/core/"
           glob: "{src/schema.rs,migrations/**/*.sql}"
           run: mise exec -- env DATABASE_URL="$(mktemp -u)-check.sqlite" diesel database reset --locked-schema
 
@@ -36,5 +42,7 @@ pre-commit:
           run: cargo fmt --check
 
         - name: sqruff
+          # root: .sqruff config lives in crates/core
+          root: "crates/core/"
           glob: "*.sql"
           run: sqruff lint {staged_files}

@@ -16,13 +16,13 @@ zig = "0.15.2"
 [env]
 _.file = ".env"
 # Local dev DB for diesel-cli (migrations + schema generation). Gitignored; the
-# generated src/schema.rs IS committed. Relative to the repo root.
+# generated schema.rs IS committed. Relative to crates/core, where diesel runs.
 DATABASE_URL = ".db/dev.sqlite"
 
 [tasks.setup]
-run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh", "mkdir -p .db", "diesel database setup"]
+run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh", "cd crates/core && mkdir -p .db && diesel database setup"]
 
 # Rebuild the local dev DB from migrations and regenerate src/schema.rs from it
 # (migrations are the single source of truth). Run after adding/changing a migration.
 [tasks."db:prepare"]
-run = ["mkdir -p .db", "diesel database reset"]
+run = ["cd crates/core && mkdir -p .db && diesel database reset"]

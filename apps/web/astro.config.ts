@@ -1,10 +1,9 @@
-import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
 import starlightRosePine from "starlight-theme-rose-pine";
 
 // https://astro.build/config
 export default defineConfig({
-    srcDir: "docs",
     integrations: [
         starlight({
             plugins: [starlightRosePine()],

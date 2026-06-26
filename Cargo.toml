@@ -1,28 +1,3 @@
-[package]
-name = "piyo"
-version = "0.1.0"
-edition = "2024"
-
-[lib]
-name = "piyo"
-# staticlib -> libpiyo.a, statically linked into the macOS app
-crate-type = ["staticlib"]
-
-# Swift-specific bindings generator (built from this crate via the uniffi `cli` feature)
-[[bin]]
-name = "uniffi-bindgen-swift"
-path = "src/bin/uniffi-bindgen-swift.rs"
-
-[dependencies]
-uniffi = { version = "0.31.2", features = ["cli", "tokio"] }
-gix = "0.85"
-diesel = { version = "2.3", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
-diesel-async = { version = "0.9", features = ["sqlite", "sync-connection-wrapper", "deadpool"] }
-diesel_migrations = { version = "2.3", features = ["sqlite"] }
-# bundled: compile SQLite into libpiyo.a so the app links nothing extra
-libsqlite3-sys = { version = "0.33", features = ["bundled"] }
-tokio = { version = "1", features = ["rt"] }
-uuid = { version = "1", features = ["v4"] }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+[workspace]
+resolver = "3"
+members = ["crates/*"]
