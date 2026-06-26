@@ -2,15 +2,16 @@
 experimental = true
 
 [tools]
+"aqua:quarylabs/sqruff" = "latest"
 bun = "latest"
+# sqlite-only, bundled SQLite — so cloning doesn't build the Postgres/MySQL
+# drivers. Used for migrations + regenerating src/schema.rs (migrations are truth).
+"cargo:diesel_cli" = { version = "2.3.10", default-features = false, features = "sqlite-bundled" }
 rust = "stable"
 swiftformat = "latest"
 swiftlint = "latest"
 xcodegen = "latest"
 zig = "0.15.2"
-# sqlite-only, bundled SQLite — so cloning doesn't build the Postgres/MySQL
-# drivers. Used for migrations + regenerating src/schema.rs (migrations are truth).
-"cargo:diesel_cli" = { version = "2.3.10", default-features = false, features = "sqlite-bundled" }
 
 [env]
 _.file = ".env"

@@ -34,3 +34,7 @@ pre-commit:
         - name: rustfmt
           glob: "*.rs"
           run: cargo fmt --check
+
+        - name: sqruff
+          glob: "*.sql"
+          run: sqruff lint {staged_files}
