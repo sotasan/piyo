@@ -5,8 +5,8 @@ edition = "2024"
 
 [lib]
 name = "piyo"
-# staticlib -> link into the macOS app; cdylib -> optional dynamic lib; lib -> normal Rust crate
-crate-type = ["staticlib", "cdylib", "lib"]
+# staticlib -> libpiyo.a, statically linked into the macOS app
+crate-type = ["staticlib"]
 
 # Swift-specific bindings generator (built from this crate via the uniffi `cli` feature)
 [[bin]]
