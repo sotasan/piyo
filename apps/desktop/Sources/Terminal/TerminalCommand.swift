@@ -42,18 +42,24 @@ enum TerminalCommand {
         "piyo-\(sessionId)"
     }
 
-    /// The command ghostty execs for a worktree: `cd <dir> && env … zmx attach <session>`.
+    /// The command ghostty execs for a worktree: `env … zmx attach <session>`.
+    ///
+    /// ghostty wraps a shell command as `bash -c "exec -l <command>"`, so the
+    /// command must *start with a real executable* — `/usr/bin/env`, never a
+    /// `cd` shell builtin (`exec -l cd …` fails with "cd: not found"). The
+    /// worktree directory is set via ghostty's `working-directory` config (see
+    /// `TerminalPane`); a session's first creation inherits it, later attaches
+    /// reuse it.
     ///
     /// The environment is set inline with `/usr/bin/env` (not ghostty's `env`
     /// config, which doesn't reach the spawned shell here): `-u …` clears any
     /// inherited zmx session vars (else `attach` targets the wrong session),
     /// `ZMX_DIR` isolates the session, and the `GHOSTTY_*`/`ZDOTDIR` vars
-    /// activate ghostty's zsh shell integration through zmx. The leading `cd`
-    /// only affects a session's first creation; later attaches reuse it.
+    /// activate ghostty's zsh shell integration through zmx.
     ///
-    /// Paths are double-quoted: ghostty runs this through `bash -c`/`/bin/sh -c`,
-    /// so shell quoting handles spaces in the directory, bundle path, or `$TMPDIR`.
-    static func build(directory: String, session: String) -> String {
+    /// Paths are double-quoted: ghostty runs this through `bash -c`, so shell
+    /// quoting handles spaces in the bundle path or `$TMPDIR`.
+    static func build(session: String) -> String {
         var parts = [
             "/usr/bin/env", "-u", "ZMX_SESSION", "-u", "ZMX_SESSION_PREFIX",
             "ZMX_DIR=\"\(zmxDir)\"",
@@ -66,6 +72,6 @@ enum TerminalCommand {
             ]
         }
         parts += ["\"\(zmx)\"", "attach", session]
-        return "cd \"\(directory)\" && \(parts.joined(separator: " "))"
+        return parts.joined(separator: " ")
     }
 }

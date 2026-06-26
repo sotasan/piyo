@@ -10,12 +10,12 @@ struct TerminalPane: View {
 
     init(worktree: Worktree, sessionId: String) {
         let command = TerminalCommand.build(
-            directory: worktree.path,
             session: TerminalCommand.sessionName(for: sessionId),
         )
         _terminal = StateObject(
             wrappedValue: TerminalViewState(
                 terminalConfiguration: .init { builder in
+                    builder.withCustom("working-directory", worktree.path)
                     builder.withCustom("command", command)
                 },
             ),
