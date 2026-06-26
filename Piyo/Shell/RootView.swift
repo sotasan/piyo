@@ -17,12 +17,12 @@ struct RootView: View {
             } else {
                 let hint: LocalizedStringKey =
                     store.repos.isEmpty
-                    ? "Add a repository with the + button."
-                    : "Pick a worktree from the sidebar."
+                        ? "Add a repository with the + button."
+                        : "Pick a worktree from the sidebar."
                 ContentUnavailableView(
                     "No Worktree Selected",
                     systemImage: "sidebar.left",
-                    description: Text(hint)
+                    description: Text(hint),
                 )
             }
         }
@@ -30,11 +30,11 @@ struct RootView: View {
         .task { await store.start() }
         .alert(
             "Couldn't add repository",
-            isPresented: Binding(get: { addError != nil }, set: { if !$0 { addError = nil } })
+            isPresented: Binding(get: { addError != nil }, set: { if !$0 { addError = nil } }),
         ) {
             Button("OK") { addError = nil }
         } message: {
-            Text(addError ?? "")  // already localized by RepoStore.add
+            Text(addError ?? "") // already localized by RepoStore.add
         }
     }
 }

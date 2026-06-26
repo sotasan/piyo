@@ -15,13 +15,14 @@ struct WorktreeDetailView: View {
         let sessions = store.sessions(for: worktree)
         let active =
             selected.flatMap { id in sessions.contains { $0.id == id } ? id : nil }
-            ?? sessions.first?.id
+                ?? sessions.first?.id
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                     tab(
                         session: session, number: index + 1,
-                        active: session.id == active, closable: sessions.count > 1)
+                        active: session.id == active, closable: sessions.count > 1,
+                    )
                 }
                 Button {
                     Task { selected = await store.addSession(to: worktree)?.id }

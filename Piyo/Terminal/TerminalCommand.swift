@@ -38,7 +38,9 @@ enum TerminalCommand {
     /// UUID (the store's primary key) is used directly — it's already stable and
     /// unique, so the persistent zmx session is reattached across launches with
     /// no hashing. Fits the socket-path limit: `piyo-` + 36-char UUID = 41 bytes.
-    static func sessionName(for sessionId: String) -> String { "piyo-\(sessionId)" }
+    static func sessionName(for sessionId: String) -> String {
+        "piyo-\(sessionId)"
+    }
 
     /// The command ghostty execs for a worktree: `cd <dir> && env … zmx attach <session>`.
     ///

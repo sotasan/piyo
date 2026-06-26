@@ -28,8 +28,13 @@ final class RepoStore {
 
     // MARK: - Synchronous snapshot reads (used directly in SwiftUI bodies)
 
-    func worktrees(for repo: Repo) -> [Worktree] { worktreesByRepo[repo.path] ?? [] }
-    func sessions(for worktree: Worktree) -> [Session] { sessionsByWorktree[worktree.path] ?? [] }
+    func worktrees(for repo: Repo) -> [Worktree] {
+        worktreesByRepo[repo.path] ?? []
+    }
+
+    func sessions(for worktree: Worktree) -> [Session] {
+        sessionsByWorktree[worktree.path] ?? []
+    }
 
     // MARK: - Async mutations (await the Rust core, then refresh snapshots)
 
@@ -85,7 +90,7 @@ final class RepoStore {
         var worktrees: [String: [Worktree]] = [:]
         var sessions: [String: [Session]] = [:]
         for repo in loaded {
-            let list = core.worktrees(repoPath: repo.path)  // sync cache read
+            let list = core.worktrees(repoPath: repo.path) // sync cache read
             worktrees[repo.path] = list
             for worktree in list {
                 sessions[worktree.path] = await core.sessions(worktreePath: worktree.path)
@@ -101,7 +106,7 @@ final class RepoStore {
         let fileManager = FileManager.default
         let base =
             fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let dir = base.appendingPathComponent("sh.piyo", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("piyo.sqlite").path
@@ -113,4 +118,6 @@ final class RepoStore {
 // `Session` carry a UUID `id` field already; a `Worktree`'s path is its id.
 extension Repo: Identifiable {}
 extension Session: Identifiable {}
-extension Worktree: Identifiable { public var id: String { path } }
+extension Worktree: Identifiable { public var id: String {
+    path
+} }
