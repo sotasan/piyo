@@ -9,9 +9,9 @@ pre-commit:
           glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
           run: oxfmt --check --no-error-on-unmatched-pattern {staged_files}
 
-        - name: swift-format
+        - name: swiftformat
           glob: "*.swift"
-          run: swift format lint --strict {staged_files}
+          run: swiftformat --lint {staged_files}
 
         - name: swiftlint
           glob: "*.swift"

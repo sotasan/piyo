@@ -1,0 +1,2 @@
+--swiftversion 6.2
+--exclude target,vendor

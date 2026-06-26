@@ -62,7 +62,7 @@ targets:
                 PRODUCT_BUNDLE_IDENTIFIER: sh.piyo
                 MARKETING_VERSION: "0.1.0"
                 CURRENT_PROJECT_VERSION: "1"
-                SWIFT_VERSION: "5.0"
+                SWIFT_VERSION: "6.0"
                 CODE_SIGN_IDENTITY: "-"
                 CODE_SIGN_STYLE: Manual
                 ENABLE_HARDENED_RUNTIME: NO

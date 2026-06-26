@@ -8,6 +8,7 @@ oxfmt = "latest"
 # Channel is pinned in rust-toolchain.toml (rustup honors it in-tree, and it
 # also works for non-mise/CI users); listed here so `mise install` bootstraps it.
 rust = "stable"
+swiftformat = "latest"
 swiftlint = "latest"
 xcodegen = "latest"
 zig = "0.15.2"
