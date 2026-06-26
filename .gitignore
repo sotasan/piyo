@@ -1,7 +1,12 @@
 .DS_Store
-node_modules
-docs/.vitepress/dist
-docs/.vitepress/cache
+
+# build output
+dist/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
 
 # Swift Package Manager
 .build/
