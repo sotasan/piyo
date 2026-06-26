@@ -9,9 +9,7 @@ export default defineConfig({
         starlight({
             plugins: [starlightRosePine()],
             title: "My Docs",
-            social: [
-                { icon: "github", label: "GitHub", href: "https://github.com/withastro/starlight" },
-            ],
+            social: [{ icon: "github", label: "GitHub", href: "https://github.com/sotasan/piyo" }],
             sidebar: [
                 {
                     label: "Guides",
