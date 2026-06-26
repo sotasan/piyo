@@ -7,9 +7,7 @@ pre-commit:
 
         - name: oxfmt
           glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
-          exclude:
-              - "**/*.xcassets/**"
-          run: oxfmt --check {staged_files}
+          run: oxfmt --check --no-error-on-unmatched-pattern {staged_files}
 
         - name: swift-format
           glob: "*.swift"
