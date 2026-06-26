@@ -1,6 +1,10 @@
 pre-commit:
     parallel: true
     jobs:
+        - name: clippy
+          glob: "*.rs"
+          run: cargo clippy -- -D warnings
+
         - name: oxfmt
           glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
           exclude:
@@ -20,3 +24,7 @@ pre-commit:
           # with `mise run db:prepare`). Hermetic: checks against a throwaway temp DB.
           glob: "{src/schema.rs,migrations/**/*.sql}"
           run: mise exec -- env DATABASE_URL="$(mktemp -u)-check.sqlite" diesel database reset --locked-schema
+
+        - name: rustfmt
+          glob: "*.rs"
+          run: cargo fmt --check
