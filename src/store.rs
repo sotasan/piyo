@@ -1,23 +1,35 @@
 //! The sidebar's model and business logic: the list of repositories, each one's
 //! worktrees (discovered via [`crate::git`]), and the terminal sessions per
-//! worktree — all persisted in SQLite (via `sqlx`, with migrations).
+//! worktree — all persisted in SQLite via **Diesel** (type-safe query builder,
+//! migrations as the single source of truth, schema in [`crate::schema`]).
 //!
-//! The store is **async-native**: every DB-touching method is `async fn` exported
-//! with `#[uniffi::export(async_runtime = "tokio")]`, so UniFFI drives the futures
-//! on a Tokio runtime and the generated Swift methods are `async`. Blocking git
-//! discovery is offloaded with `tokio::task::spawn_blocking`. The Swift side is a
-//! thin `@MainActor @Observable` adapter that `await`s these and republishes the
-//! state for SwiftUI.
+//! DB access is async (`diesel-async` over a `SyncConnectionWrapper` SQLite
+//! connection pool), exported with `#[uniffi::export(async_runtime = "tokio")]`
+//! so the generated Swift methods are `async`. Migrations run synchronously on a
+//! blocking thread at [`Self::open`]. The Swift side is a thin `@MainActor`
+//! `@Observable` adapter that `await`s these and republishes the state.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::SqlitePool;
+use diesel::dsl::max;
+use diesel::prelude::*;
+use diesel::sqlite::SqliteConnection;
+use diesel_async::pooled_connection::deadpool::Pool;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
+use diesel_async::RunQueryDsl;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use uuid::Uuid;
 
 use crate::git::{self, Worktree};
+use crate::schema::{repositories, sessions};
+
+type AsyncConn = SyncConnectionWrapper<SqliteConnection>;
+type DbPool = Pool<AsyncConn>;
+
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 /// A git repository the user has added to the sidebar.
 #[derive(uniffi::Record, Clone, Debug)]
@@ -46,29 +58,26 @@ pub enum AddRepoOutcome {
 }
 
 /// In-memory, non-persisted derived state: each repo's discovered worktrees and
-/// the reverse map from a worktree path to its owning repository id (needed to
-/// attach new sessions to the right repo).
+/// the reverse map from a worktree path to its owning repository id.
 #[derive(Default)]
 struct Cache {
     worktrees: HashMap<String, Vec<Worktree>>, // repo path -> worktrees
     worktree_repo: HashMap<String, String>,    // worktree path -> repository id
 }
 
-/// The store object Swift holds. The pool is created in [`Self::open`], not the
-/// constructor: building a pool needs a Tokio runtime context (it spawns a
-/// background task), which only the async methods have — the constructor is
-/// synchronous so Swift can build it in a plain `@State` initializer.
+/// The store object Swift holds. The pool is created in [`Self::open`] (its
+/// connections live on the Tokio runtime), so the constructor stays synchronous.
 #[derive(uniffi::Object)]
 pub struct RepoStoreCore {
     db_path: String,
-    pool: OnceLock<SqlitePool>,
+    pool: OnceLock<DbPool>,
     cache: Mutex<Cache>,
 }
 
 #[uniffi::export]
 impl RepoStoreCore {
     /// Create the store over the SQLite database at `db_path`. Does no IO; call
-    /// [`Self::open`] (async) to create the pool, run migrations, and discover.
+    /// [`Self::open`] (async) to run migrations, build the pool, and discover.
     #[uniffi::constructor]
     pub fn new(db_path: String) -> Arc<Self> {
         Arc::new(Self {
@@ -92,48 +101,44 @@ impl RepoStoreCore {
 
 #[uniffi::export(async_runtime = "tokio")]
 impl RepoStoreCore {
-    /// Create the connection pool, run migrations, and discover the saved
-    /// repositories' worktrees. Call once after construction, before reading
-    /// state. Runs under UniFFI's Tokio runtime (so pool creation has a context).
+    /// Run migrations, build the connection pool, and discover the saved
+    /// repositories' worktrees. Call once after construction, before reading.
     pub async fn open(&self) {
-        let options = SqliteConnectOptions::new()
-            .filename(&self.db_path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal);
-        let pool = SqlitePoolOptions::new().connect_lazy_with(options);
-        let _ = sqlx::migrate!("./migrations").run(&pool).await;
-        let _ = self.pool.set(pool);
+        run_migrations(self.db_path.clone()).await;
+        let manager = AsyncDieselConnectionManager::<AsyncConn>::new(self.db_path.clone());
+        if let Ok(pool) = Pool::builder(manager).build() {
+            let _ = self.pool.set(pool);
+        }
         self.rediscover().await;
     }
 
     /// The added repositories, in saved (drag-to-reorder) order.
     pub async fn repos(&self) -> Vec<Repo> {
-        let Some(pool) = self.pool.get() else {
+        let Ok(mut conn) = self.conn().await else {
             return Vec::new();
         };
-        load_repos(pool).await
+        fetch_repos(&mut conn).await
     }
 
     /// The sessions of a worktree, in saved order (does not create any).
     pub async fn sessions(&self, worktree_path: String) -> Vec<Session> {
-        let Some(pool) = self.pool.get() else {
+        let Ok(mut conn) = self.conn().await else {
             return Vec::new();
         };
-        into_sessions(session_ids(pool, &worktree_path).await, &worktree_path)
+        into_sessions(fetch_session_ids(&mut conn, &worktree_path).await, &worktree_path)
     }
 
     /// Ensure a worktree has at least one session (creating a default if empty),
     /// then return its sessions. Used when a worktree is first opened.
     pub async fn ensure_session(&self, worktree_path: String) -> Vec<Session> {
-        let Some(pool) = self.pool.get() else {
+        let repo_id = self.repo_for(&worktree_path);
+        let Ok(mut conn) = self.conn().await else {
             return Vec::new();
         };
-        let repo_id = self.repo_for(&worktree_path);
-        let mut ids = session_ids(pool, &worktree_path).await;
+        let mut ids = fetch_session_ids(&mut conn, &worktree_path).await;
         if ids.is_empty() {
             if let Some(repo_id) = repo_id {
-                if let Some(id) = insert_session(pool, &repo_id, &worktree_path).await {
+                if let Some(id) = insert_session(&mut conn, &repo_id, &worktree_path).await {
                     ids.push(id);
                 }
             }
@@ -144,27 +149,25 @@ impl RepoStoreCore {
     /// Open a new session on a worktree; returns it (or `None` if the worktree's
     /// repository isn't known).
     pub async fn add_session(&self, worktree_path: String) -> Option<Session> {
-        let pool = self.pool.get()?;
         let repo_id = self.repo_for(&worktree_path)?;
-        let id = insert_session(pool, &repo_id, &worktree_path).await?;
+        let mut conn = self.conn().await.ok()?;
+        let id = insert_session(&mut conn, &repo_id, &worktree_path).await?;
         Some(Session { id, worktree_path })
     }
 
     /// Close a session (the UI keeps at least one open).
     pub async fn close_session(&self, session_id: String) {
-        let Some(pool) = self.pool.get() else { return };
-        let _ = sqlx::query("DELETE FROM sessions WHERE id = ?")
-            .bind(&session_id)
-            .execute(pool)
+        let Ok(mut conn) = self.conn().await else {
+            return;
+        };
+        let _ = diesel::delete(sessions::table.filter(sessions::id.eq(&session_id)))
+            .execute(&mut conn)
             .await;
     }
 
     /// Add the git repository containing `folder` (deduped by toplevel path).
     pub async fn add_folder(&self, folder: String) -> AddRepoOutcome {
-        let Some(pool) = self.pool.get() else {
-            return AddRepoOutcome::NotARepository;
-        };
-        // gitoxide discovery is blocking filesystem work — keep it off the async pool.
+        // gitoxide discovery is blocking filesystem work — keep it off the runtime.
         let top = tokio::task::spawn_blocking(move || git::resolve_toplevel(&folder))
             .await
             .ok()
@@ -172,60 +175,77 @@ impl RepoStoreCore {
         let Some(top) = top else {
             return AddRepoOutcome::NotARepository;
         };
+        let Ok(mut conn) = self.conn().await else {
+            return AddRepoOutcome::NotARepository;
+        };
 
-        let existing: Option<String> = sqlx::query_scalar("SELECT id FROM repositories WHERE path = ?")
-            .bind(&top)
-            .fetch_optional(pool)
+        let existing: Option<String> = repositories::table
+            .filter(repositories::path.eq(&top))
+            .select(repositories::id)
+            .first(&mut conn)
             .await
-            .ok()
-            .flatten();
+            .ok();
         if existing.is_some() {
             return AddRepoOutcome::AlreadyPresent;
         }
 
-        let position: i64 =
-            sqlx::query_scalar("SELECT COALESCE(MAX(position) + 1, 0) FROM repositories")
-                .fetch_one(pool)
-                .await
-                .unwrap_or(0);
-        let _ = sqlx::query("INSERT INTO repositories (id, path, position) VALUES (?, ?, ?)")
-            .bind(Uuid::new_v4().to_string())
-            .bind(&top)
-            .bind(position)
-            .execute(pool)
+        let next: Option<i32> = repositories::table
+            .select(max(repositories::position))
+            .first(&mut conn)
+            .await
+            .unwrap_or(None);
+        let position = next.map(|p| p + 1).unwrap_or(0);
+        let _ = diesel::insert_into(repositories::table)
+            .values((
+                repositories::id.eq(Uuid::new_v4().to_string()),
+                repositories::path.eq(&top),
+                repositories::position.eq(position),
+            ))
+            .execute(&mut conn)
             .await;
+        drop(conn);
         self.rediscover().await;
         AddRepoOutcome::Added
     }
 
-    /// Remove a repository (cascade-deletes its sessions).
+    /// Remove a repository and its sessions.
     pub async fn remove(&self, repo_id: String) {
-        let Some(pool) = self.pool.get() else { return };
-        let _ = sqlx::query("DELETE FROM repositories WHERE id = ?")
-            .bind(&repo_id)
-            .execute(pool)
-            .await;
+        if let Ok(mut conn) = self.conn().await {
+            // Explicit, so we don't depend on per-connection `PRAGMA foreign_keys`.
+            let _ = diesel::delete(sessions::table.filter(sessions::repository_id.eq(&repo_id)))
+                .execute(&mut conn)
+                .await;
+            let _ = diesel::delete(repositories::table.filter(repositories::id.eq(&repo_id)))
+                .execute(&mut conn)
+                .await;
+        }
         self.rediscover().await;
     }
 
     /// Persist a new sidebar order for the repositories (their ids top to bottom).
     pub async fn reorder_repositories(&self, ordered_ids: Vec<String>) {
-        let Some(pool) = self.pool.get() else { return };
-        let Ok(mut tx) = pool.begin().await else {
+        let Ok(mut conn) = self.conn().await else {
             return;
         };
-        for (position, id) in ordered_ids.iter().enumerate() {
-            let _ = sqlx::query("UPDATE repositories SET position = ? WHERE id = ?")
-                .bind(position as i64)
-                .bind(id)
-                .execute(&mut *tx)
+        for (index, id) in ordered_ids.iter().enumerate() {
+            let position = index as i32;
+            let _ = diesel::update(repositories::table.filter(repositories::id.eq(id)))
+                .set(repositories::position.eq(position))
+                .execute(&mut conn)
                 .await;
         }
-        let _ = tx.commit().await;
     }
 }
 
 impl RepoStoreCore {
+    /// A pooled async connection (errors if [`Self::open`] hasn't run).
+    async fn conn(
+        &self,
+    ) -> Result<diesel_async::pooled_connection::deadpool::Object<AsyncConn>, ()> {
+        let pool = self.pool.get().ok_or(())?;
+        pool.get().await.map_err(|_| ())
+    }
+
     /// The repository id owning a worktree path, from the in-memory map.
     fn repo_for(&self, worktree_path: &str) -> Option<String> {
         self.cache
@@ -238,8 +258,10 @@ impl RepoStoreCore {
 
     /// Rebuild the worktree cache + reverse map from the persisted repositories.
     async fn rediscover(&self) {
-        let Some(pool) = self.pool.get() else { return };
-        let repos = load_repos(pool).await;
+        let Ok(mut conn) = self.conn().await else {
+            return;
+        };
+        let repos = fetch_repos(&mut conn).await;
         // Discover worktrees (blocking git IO) off the async runtime's worker.
         let discovered = tokio::task::spawn_blocking(move || {
             repos
@@ -265,12 +287,13 @@ impl RepoStoreCore {
     }
 }
 
-async fn load_repos(pool: &SqlitePool) -> Vec<Repo> {
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT id, path FROM repositories ORDER BY position")
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
+async fn fetch_repos(conn: &mut AsyncConn) -> Vec<Repo> {
+    let rows: Vec<(String, String)> = repositories::table
+        .select((repositories::id, repositories::path))
+        .order(repositories::position.asc())
+        .load(conn)
+        .await
+        .unwrap_or_default();
     rows.into_iter()
         .map(|(id, path)| Repo {
             name: repo_name(&path),
@@ -280,28 +303,33 @@ async fn load_repos(pool: &SqlitePool) -> Vec<Repo> {
         .collect()
 }
 
-async fn session_ids(pool: &SqlitePool, worktree_path: &str) -> Vec<String> {
-    sqlx::query_scalar("SELECT id FROM sessions WHERE worktree_path = ? ORDER BY position")
-        .bind(worktree_path)
-        .fetch_all(pool)
+async fn fetch_session_ids(conn: &mut AsyncConn, worktree_path: &str) -> Vec<String> {
+    sessions::table
+        .filter(sessions::worktree_path.eq(worktree_path))
+        .order(sessions::position.asc())
+        .select(sessions::id)
+        .load(conn)
         .await
         .unwrap_or_default()
 }
 
-async fn insert_session(pool: &SqlitePool, repo_id: &str, worktree_path: &str) -> Option<String> {
+async fn insert_session(conn: &mut AsyncConn, repo_id: &str, worktree_path: &str) -> Option<String> {
     let id = Uuid::new_v4().to_string();
-    let position: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(position) + 1, 0) FROM sessions WHERE worktree_path = ?")
-            .bind(worktree_path)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
-    sqlx::query("INSERT INTO sessions (id, repository_id, worktree_path, position) VALUES (?, ?, ?, ?)")
-        .bind(&id)
-        .bind(repo_id)
-        .bind(worktree_path)
-        .bind(position)
-        .execute(pool)
+    let next: Option<i32> = sessions::table
+        .filter(sessions::worktree_path.eq(worktree_path))
+        .select(max(sessions::position))
+        .first(conn)
+        .await
+        .unwrap_or(None);
+    let position = next.map(|p| p + 1).unwrap_or(0);
+    diesel::insert_into(sessions::table)
+        .values((
+            sessions::id.eq(&id),
+            sessions::repository_id.eq(repo_id),
+            sessions::worktree_path.eq(worktree_path),
+            sessions::position.eq(position),
+        ))
+        .execute(conn)
         .await
         .ok()?;
     Some(id)
@@ -314,6 +342,17 @@ fn into_sessions(ids: Vec<String>, worktree_path: &str) -> Vec<Session> {
             worktree_path: worktree_path.to_string(),
         })
         .collect()
+}
+
+/// Run pending migrations synchronously (diesel_migrations is sync) on a blocking
+/// thread, creating the database file if missing.
+async fn run_migrations(db_path: String) {
+    let _ = tokio::task::spawn_blocking(move || {
+        let mut conn = SqliteConnection::establish(&db_path)?;
+        conn.run_pending_migrations(MIGRATIONS)?;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    })
+    .await;
 }
 
 /// Display name = the last path component, falling back to the whole path.
@@ -403,7 +442,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sessions_uuid_default_and_fk_cascade() {
+    async fn sessions_uuid_default_and_removed_with_repo() {
         let root = scratch("sessions");
         let repo = init_repo(&root, "repo");
         let db = root.join("piyo.sqlite");
@@ -430,7 +469,7 @@ mod tests {
 
         let repo_id = core.repos().await[0].id.clone();
         core.remove(repo_id).await;
-        assert!(core.sessions(wt).await.is_empty()); // cascade
+        assert!(core.sessions(wt).await.is_empty());
 
         let _ = std::fs::remove_dir_all(&root);
     }

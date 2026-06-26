@@ -1,6 +1,22 @@
 pre-commit:
     parallel: true
     jobs:
+        - name: oxfmt
+          glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
+          exclude:
+              - "**/*.xcassets/**"
+          run: oxfmt --check {staged_files}
+
         - name: swift-format
           glob: "*.swift"
           run: swift format lint --strict {staged_files}
+
+        - name: swiftlint
+          glob: "*.swift"
+          run: swiftlint lint --strict --quiet {staged_files}
+
+        - name: diesel-schema
+          # Fail if src/schema.rs is out of sync with the migrations (regenerate
+          # with `mise run db:prepare`). Hermetic: checks against a throwaway temp DB.
+          glob: "{src/schema.rs,migrations/**/*.sql}"
+          run: mise exec -- env DATABASE_URL="$(mktemp -u)-check.sqlite" diesel database reset --locked-schema

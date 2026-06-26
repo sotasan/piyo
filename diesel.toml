@@ -1,0 +1,7 @@
+# Diesel config. Migrations are the single source of truth; `diesel migration`
+# regenerates `src/schema.rs` from them (never hand-edit schema.rs).
+[print_schema]
+file = "src/schema.rs"
+
+[migrations_directory]
+dir = "migrations"

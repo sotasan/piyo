@@ -98,12 +98,12 @@ final class RepoStore {
 
     /// The SQLite database under Application Support (`sh.piyo/piyo.sqlite`).
     private static func databasePath() -> String {
-        let fm = FileManager.default
+        let fileManager = FileManager.default
         let base =
-            fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let dir = base.appendingPathComponent("sh.piyo", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("piyo.sqlite").path
     }
 }

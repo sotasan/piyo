@@ -3,17 +3,27 @@ experimental = true
 
 [tools]
 lefthook = "latest"
+oxfmt = "latest"
+swiftlint = "latest"
 xcodegen = "latest"
 zig = "0.15.2"
-# sqlite-only (+ rustls) so cloning doesn't build the Postgres/MySQL drivers or
-# OpenSSL. Pinned to the sqlx lib version to keep the .sqlx cache format in sync.
-"cargo:sqlx-cli" = { version = "0.8.6", default-features = false, features = "sqlite,rustls" }
+# sqlite-only, bundled SQLite — so cloning doesn't build the Postgres/MySQL
+# drivers. Used for migrations + regenerating src/schema.rs (migrations are truth).
+"cargo:diesel_cli" = { version = "2.3.10", default-features = false, features = "sqlite-bundled" }
 
 [env]
 _.file = ".env"
+# Local dev DB for diesel-cli (migrations + schema generation). Gitignored; the
+# generated src/schema.rs IS committed. Relative to the repo root.
+DATABASE_URL = ".db/dev.sqlite"
 
 [hooks]
 postinstall = "lefthook install"
 
 [tasks.setup]
-run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh"]
+run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh", "mkdir -p .db", "diesel database setup"]
+
+# Rebuild the local dev DB from migrations and regenerate src/schema.rs from it
+# (migrations are the single source of truth). Run after adding/changing a migration.
+[tasks."db:prepare"]
+run = ["mkdir -p .db", "diesel database reset"]

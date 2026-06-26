@@ -1,0 +1,6 @@
+included:
+    - Piyo
+
+# swift-format adds trailing commas to multiline collections; let it own that.
+disabled_rules:
+    - trailing_comma
