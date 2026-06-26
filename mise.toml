@@ -2,6 +2,7 @@
 experimental = true
 
 [tools]
+bun = "latest"
 lefthook = "latest"
 oxfmt = "latest"
 # Channel is pinned in rust-toolchain.toml (rustup honors it in-tree, and it
