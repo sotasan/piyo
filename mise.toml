@@ -3,10 +3,6 @@ experimental = true
 
 [tools]
 bun = "latest"
-lefthook = "latest"
-oxfmt = "latest"
-# Channel is pinned in rust-toolchain.toml (rustup honors it in-tree, and it
-# also works for non-mise/CI users); listed here so `mise install` bootstraps it.
 rust = "stable"
 swiftformat = "latest"
 swiftlint = "latest"
@@ -21,9 +17,6 @@ _.file = ".env"
 # Local dev DB for diesel-cli (migrations + schema generation). Gitignored; the
 # generated src/schema.rs IS committed. Relative to the repo root.
 DATABASE_URL = ".db/dev.sqlite"
-
-[hooks]
-postinstall = "lefthook install"
 
 [tasks.setup]
 run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh", "mkdir -p .db", "diesel database setup"]

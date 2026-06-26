@@ -3,12 +3,16 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "astro dev",
-        "start": "astro dev",
-        "build": "astro build",
-        "preview": "astro preview",
         "astro": "astro",
-        "check": "astro check"
+        "build": "astro build",
+        "check": "astro check",
+        "dev": "astro dev",
+        "format": "oxfmt",
+        "format:check": "oxfmt --check",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
+        "preview": "astro preview",
+        "start": "astro dev"
     },
     "dependencies": {
         "@astrojs/starlight": "^0.41.1",
@@ -18,6 +22,9 @@
     },
     "devDependencies": {
         "@astrojs/check": "^0.9.9",
+        "lefthook": "^2.1.9",
+        "oxfmt": "^0.56.0",
+        "oxlint": "^1.71.0",
         "typescript": "^6.0.3"
     }
 }

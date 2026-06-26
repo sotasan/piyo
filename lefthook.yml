@@ -1,13 +1,21 @@
 pre-commit:
     parallel: true
     jobs:
+        - name: astro-check
+          glob: "*.{astro,ts,tsx,mts,cts,mdx,md}"
+          run: bun run check
+
         - name: clippy
           glob: "*.rs"
           run: cargo clippy -- -D warnings
 
         - name: oxfmt
           glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
-          run: oxfmt --check --no-error-on-unmatched-pattern {staged_files}
+          run: bun run format:check --no-error-on-unmatched-pattern {staged_files}
+
+        - name: oxlint
+          glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
+          run: bun run lint --deny-warnings {staged_files}
 
         - name: swiftformat
           glob: "*.swift"
