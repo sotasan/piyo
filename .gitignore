@@ -24,3 +24,6 @@ buildServer.json
 
 # cargo workspace build output
 /target
+
+# release build output (dmg + appcast)
+/dist/

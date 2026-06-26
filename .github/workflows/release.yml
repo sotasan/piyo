@@ -1,0 +1,141 @@
+name: Release
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        name: Build & release
+        runs-on: macos-26
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  submodules: recursive # vendor/ghostty + vendor/zmx are needed by the build
+
+            - name: Select Xcode 26.2
+              uses: maxim-lobanov/setup-xcode@v1
+              with:
+                  xcode-version: "26.2"
+
+            - name: Setup toolchain
+              uses: jdx/mise-action@v4
+              with:
+                  install: true
+                  cache: true
+
+            - name: Cache Cargo registry & target
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: .
+
+            - name: Resolve release tag
+              id: tag
+              run: |
+                  version=$(awk -F\" '/^version/ {print $2; exit}' crates/core/Cargo.toml)
+                  echo "version=${version}" >> "$GITHUB_OUTPUT"
+                  echo "value=v${version}" >> "$GITHUB_OUTPUT"
+
+            - name: Generate release notes
+              id: changelog
+              uses: orhun/git-cliff-action@main
+              with:
+                  config: cliff.toml
+                  args: --unreleased --tag ${{ steps.tag.outputs.value }}
+
+            - name: Import Developer ID certificate
+              uses: apple-actions/import-codesign-certs@v3
+              with:
+                  p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+                  p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+            - name: Build, sign, notarize & make appcast
+              env:
+                  APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+                  SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+                  VERSION: ${{ steps.tag.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  ./scripts/build-zmx.sh
+                  ./scripts/build-icon.sh
+                  xcodegen generate
+
+                  # Release build: Developer ID + hardened runtime + secure timestamp
+                  # (the project default is ad-hoc; override for a distributable build).
+                  xcodebuild -scheme Piyo -configuration Release -derivedDataPath .build-xcode \
+                    -destination 'platform=macOS' \
+                    MARKETING_VERSION="$VERSION" \
+                    CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+                    CODE_SIGN_STYLE=Manual \
+                    CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
+                    ENABLE_HARDENED_RUNTIME=YES \
+                    OTHER_CODE_SIGN_FLAGS="--timestamp --options runtime" \
+                    build
+
+                  APP=.build-xcode/Build/Products/Release/Piyo.app
+                  mkdir -p dist
+                  DMG="dist/Piyo-${VERSION}.dmg"
+
+                  # 1) Notarize + staple the .app, so the copy a user (or Sparkle) pulls
+                  #    out of the dmg is self-contained offline.
+                  ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/app.zip"
+                  xcrun notarytool submit "$RUNNER_TEMP/app.zip" \
+                    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+                  xcrun stapler staple "$APP"
+
+                  # 2) Build the dmg from the now-stapled app (+ drag-to-Applications symlink).
+                  STAGE="$RUNNER_TEMP/dmg"
+                  mkdir -p "$STAGE"
+                  cp -R "$APP" "$STAGE/"
+                  ln -s /Applications "$STAGE/Applications"
+                  hdiutil create -volname Piyo -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+                  codesign --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$DMG"
+
+                  # 3) Notarize + staple the dmg container too.
+                  xcrun notarytool submit "$DMG" \
+                    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+                  xcrun stapler staple "$DMG"
+
+                  # Sparkle: EdDSA-sign the dmg and emit the appcast the app reads on update.
+                  BIN=.build-xcode/SourcePackages/artifacts/sparkle/Sparkle/bin
+                  echo "$SPARKLE_PRIVATE_KEY" | "$BIN/generate_appcast" dist \
+                    --ed-key-file - \
+                    --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/" \
+                    -o dist/appcast.xml
+
+            - name: Publish release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.tag.outputs.value }}
+                  VERSION: ${{ steps.tag.outputs.version }}
+                  NOTES: ${{ steps.changelog.outputs.content }}
+              run: |
+                  gh release create "$TAG" \
+                    "dist/Piyo-${VERSION}.dmg" dist/appcast.xml \
+                    --title "Piyo $TAG" --notes "$NOTES"
+
+    homebrew:
+        name: Bump cask
+        needs: release
+        runs-on: macos-26
+        steps:
+            - name: Setup Homebrew
+              uses: Homebrew/actions/setup-homebrew@main
+
+            - name: Tap
+              run: brew tap sotasan/homebrew-tap
+
+            - name: Bump cask
+              uses: Homebrew/actions/bump-packages@main
+              with:
+                  token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  casks: piyo
+                  fork: false
