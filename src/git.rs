@@ -35,7 +35,10 @@ pub(crate) fn worktrees(repo_path: &str) -> Vec<Worktree> {
     if let Some(wd) = repo.workdir() {
         let path = normalize(wd);
         if seen.insert(path.clone()) {
-            out.push(Worktree { branch: branch_label(&repo), path });
+            out.push(Worktree {
+                branch: branch_label(&repo),
+                path,
+            });
         }
     }
 

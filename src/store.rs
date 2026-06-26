@@ -16,11 +16,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use diesel_async::pooled_connection::deadpool::Pool;
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
 use diesel_async::RunQueryDsl;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::pooled_connection::deadpool::Pool;
+use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use uuid::Uuid;
 
 use crate::git::{self, Worktree};
@@ -125,7 +125,10 @@ impl RepoStoreCore {
         let Ok(mut conn) = self.conn().await else {
             return Vec::new();
         };
-        into_sessions(fetch_session_ids(&mut conn, &worktree_path).await, &worktree_path)
+        into_sessions(
+            fetch_session_ids(&mut conn, &worktree_path).await,
+            &worktree_path,
+        )
     }
 
     /// Ensure a worktree has at least one session (creating a default if empty),
@@ -136,12 +139,11 @@ impl RepoStoreCore {
             return Vec::new();
         };
         let mut ids = fetch_session_ids(&mut conn, &worktree_path).await;
-        if ids.is_empty() {
-            if let Some(repo_id) = repo_id {
-                if let Some(id) = insert_session(&mut conn, &repo_id, &worktree_path).await {
-                    ids.push(id);
-                }
-            }
+        if ids.is_empty()
+            && let Some(repo_id) = repo_id
+            && let Some(id) = insert_session(&mut conn, &repo_id, &worktree_path).await
+        {
+            ids.push(id);
         }
         into_sessions(ids, &worktree_path)
     }
@@ -280,7 +282,9 @@ impl RepoStoreCore {
         cache.worktree_repo.clear();
         for (path, id, worktrees) in discovered {
             for worktree in &worktrees {
-                cache.worktree_repo.insert(worktree.path.clone(), id.clone());
+                cache
+                    .worktree_repo
+                    .insert(worktree.path.clone(), id.clone());
             }
             cache.worktrees.insert(path, worktrees);
         }
@@ -313,7 +317,11 @@ async fn fetch_session_ids(conn: &mut AsyncConn, worktree_path: &str) -> Vec<Str
         .unwrap_or_default()
 }
 
-async fn insert_session(conn: &mut AsyncConn, repo_id: &str, worktree_path: &str) -> Option<String> {
+async fn insert_session(
+    conn: &mut AsyncConn,
+    repo_id: &str,
+    worktree_path: &str,
+) -> Option<String> {
     let id = Uuid::new_v4().to_string();
     let next: Option<i32> = sessions::table
         .filter(sessions::worktree_path.eq(worktree_path))
@@ -413,20 +421,34 @@ mod tests {
             core.add_folder(root.to_string_lossy().into_owned()).await,
             AddRepoOutcome::NotARepository
         );
-        assert_eq!(core.add_folder(a.to_string_lossy().into_owned()).await, AddRepoOutcome::Added);
-        assert_eq!(core.add_folder(b.to_string_lossy().into_owned()).await, AddRepoOutcome::Added);
+        assert_eq!(
+            core.add_folder(a.to_string_lossy().into_owned()).await,
+            AddRepoOutcome::Added
+        );
+        assert_eq!(
+            core.add_folder(b.to_string_lossy().into_owned()).await,
+            AddRepoOutcome::Added
+        );
         assert_eq!(
             core.add_folder(a.to_string_lossy().into_owned()).await,
             AddRepoOutcome::AlreadyPresent
         );
 
         let repos = core.repos().await;
-        assert_eq!(repos.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["alpha", "bravo"]);
+        assert_eq!(
+            repos.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            ["alpha", "bravo"]
+        );
         assert!(repos[0].id.len() == 36 && repos[0].id.contains('-'));
 
-        core.reorder_repositories(vec![repos[1].id.clone(), repos[0].id.clone()]).await;
+        core.reorder_repositories(vec![repos[1].id.clone(), repos[0].id.clone()])
+            .await;
         assert_eq!(
-            core.repos().await.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            core.repos()
+                .await
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
             ["bravo", "alpha"]
         );
 
@@ -434,7 +456,12 @@ mod tests {
         let reopened = RepoStoreCore::new(db.to_string_lossy().into_owned());
         reopened.open().await;
         assert_eq!(
-            reopened.repos().await.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            reopened
+                .repos()
+                .await
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
             ["bravo", "alpha"]
         );
 
