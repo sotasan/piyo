@@ -8,10 +8,10 @@ import SwiftUI
 struct TerminalPane: View {
     @StateObject private var terminal: TerminalViewState
 
-    init(worktree: Worktree, tab: Int) {
+    init(worktree: Worktree, sessionId: String) {
         let command = TerminalCommand.build(
             directory: worktree.path,
-            session: TerminalCommand.sessionName(for: worktree.path, tab: tab)
+            session: TerminalCommand.sessionName(for: sessionId)
         )
         _terminal = StateObject(
             wrappedValue: TerminalViewState(

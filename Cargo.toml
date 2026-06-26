@@ -1,0 +1,24 @@
+[package]
+name = "piyo"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "piyo"
+# staticlib -> link into the macOS app; cdylib -> optional dynamic lib; lib -> normal Rust crate
+crate-type = ["staticlib", "cdylib", "lib"]
+
+# Swift-specific bindings generator (built from this crate via the uniffi `cli` feature)
+[[bin]]
+name = "uniffi-bindgen-swift"
+path = "src/bin/uniffi-bindgen-swift.rs"
+
+[dependencies]
+uniffi = { version = "0.31.2", features = ["cli", "tokio"] }
+gix = "0.85"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+tokio = { version = "1", features = ["rt"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

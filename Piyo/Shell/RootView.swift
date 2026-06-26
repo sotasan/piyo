@@ -27,6 +27,7 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+        .task { await store.start() }
         .alert(
             "Couldn't add repository",
             isPresented: Binding(get: { addError != nil }, set: { if !$0 { addError = nil } })

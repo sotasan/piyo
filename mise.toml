@@ -5,6 +5,9 @@ experimental = true
 lefthook = "latest"
 xcodegen = "latest"
 zig = "0.15.2"
+# sqlite-only (+ rustls) so cloning doesn't build the Postgres/MySQL drivers or
+# OpenSSL. Pinned to the sqlx lib version to keep the .sqlx cache format in sync.
+"cargo:sqlx-cli" = { version = "0.8.6", default-features = false, features = "sqlite,rustls" }
 
 [env]
 _.file = ".env"

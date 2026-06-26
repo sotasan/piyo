@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// Locates bundled runtime resources (zmx, ghostty shell-integration) inside the
@@ -35,16 +34,11 @@ enum TerminalCommand {
         return FileManager.default.isReadableFile(atPath: marker) ? resources : nil
     }
 
-    /// A stable zmx session name for a worktree directory's tab, e.g. `piyo-1a2b3c…`
-    /// (tab 0) or `piyo-1a2b3c…-2`. Derived from a SHA-256 of the path (Swift's
-    /// `hashValue` is randomized per process, so it can't be used) — same
-    /// directory+tab always maps to the same session, so each tab keeps its own
-    /// persistent terminal. Tab 0 has no suffix so existing sessions keep working.
-    static func sessionName(for directory: String, tab: Int = 0) -> String {
-        let hex = SHA256.hash(data: Data(directory.utf8))
-            .prefix(6).map { String(format: "%02x", Int($0)) }.joined()
-        return tab == 0 ? "piyo-\(hex)" : "piyo-\(hex)-\(tab)"
-    }
+    /// The zmx session name for a terminal session: `piyo-<uuid>`. The session's
+    /// UUID (the store's primary key) is used directly — it's already stable and
+    /// unique, so the persistent zmx session is reattached across launches with
+    /// no hashing. Fits the socket-path limit: `piyo-` + 36-char UUID = 41 bytes.
+    static func sessionName(for sessionId: String) -> String { "piyo-\(sessionId)" }
 
     /// The command ghostty execs for a worktree: `cd <dir> && env … zmx attach <session>`.
     ///

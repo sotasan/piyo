@@ -19,9 +19,14 @@ struct SidebarView: View {
                 } label: {
                     Label(repo.name, systemImage: "folder")
                         .contextMenu {
-                            Button("Remove", role: .destructive) { store.remove(repo) }
+                            Button("Remove", role: .destructive) {
+                                Task { await store.remove(repo) }
+                            }
                         }
                 }
+            }
+            .onMove { source, destination in
+                Task { await store.moveRepos(from: source, to: destination) }
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
@@ -44,6 +49,6 @@ struct SidebarView: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Add"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        addError = store.add(folder: url.path)
+        Task { addError = await store.add(folder: url.path) }
     }
 }
