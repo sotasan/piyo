@@ -1,0 +1,21 @@
+apiVersion: vendir.k14s.io/v1alpha1
+kind: Config
+directories:
+    # ghostty: only the shell-integration scripts are bundled (see project.yml).
+    # The ghostty *library* comes from the libghostty-spm SPM package, not here,
+    # so includePaths keeps ~88K instead of the whole ~100M repo.
+    - path: vendor/ghostty
+      contents:
+          - path: .
+            git:
+                url: https://github.com/ghostty-org/ghostty
+                ref: v1.3.1
+            includePaths:
+                - src/shell-integration/**
+    # zmx: built from source by `just zmx`; needs the full zig project.
+    - path: vendor/zmx
+      contents:
+          - path: .
+            git:
+                url: https://github.com/neurosnap/zmx
+                ref: v0.6.0

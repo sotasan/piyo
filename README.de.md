@@ -48,12 +48,11 @@ Lade die neueste Version von der [Releases-Seite](https://github.com/sotasan/piy
 ## Entwicklung
 
 ```sh
-git clone --recursive https://github.com/sotasan/piyo.git
+git clone https://github.com/sotasan/piyo.git
 cd piyo
+mise trust
 mise install
-bun install
-mise run setup
-xcodegen generate
+just
 ```
 
 ## Lizenz

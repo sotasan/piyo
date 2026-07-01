@@ -1,4 +1,5 @@
 [settings]
+# Required for the postinstall hook below.
 experimental = true
 
 [tools]
@@ -9,20 +10,21 @@ bun = "latest"
 "cargo:diesel_cli" = { version = "2.3.10", default-features = false, features = "sqlite-bundled" }
 rust = "stable"
 swiftformat = "latest"
+# Tasks live in the justfile; vendir fetches vendored deps, just runs the graph.
+"aqua:carvel-dev/vendir" = "latest"
+"aqua:casey/just" = "latest"
 swiftlint = "latest"
 xcodegen = "latest"
 zig = "0.15.2"
 
+# Loads .env (DEVELOPER_DIR — the Xcode ≤26.2 SDK pin) into the shell, so a
+# terminal `xcodebuild` links the right SDK. just's dotenv-load only reaches
+# recipe processes, not your shell/Xcode, so this stays in mise.
 [env]
 _.file = ".env"
-# Local dev DB for diesel-cli (migrations + schema generation). Gitignored; the
-# generated schema.rs IS committed. Relative to crates/core, where diesel runs.
-DATABASE_URL = ".db/dev.sqlite"
 
-[tasks.setup]
-run = ["./scripts/build-zmx.sh", "./scripts/build-icon.sh", "cd crates/core && mkdir -p .db && diesel database setup"]
-
-# Rebuild the local dev DB from migrations and regenerate src/schema.rs from it
-# (migrations are the single source of truth). Run after adding/changing a migration.
-[tasks."db:prepare"]
-run = ["cd crates/core && mkdir -p .db && diesel database reset"]
+# After the toolchain installs, pull JS deps + vendored source (ghostty
+# shell-integration + zmx) so a fresh clone is `mise install && just`. Fires on
+# every `mise install`, so it doubles as the re-sync after editing vendir.yml.
+[hooks]
+postinstall = ["bun install", "vendir sync"]

@@ -24,7 +24,7 @@ targets:
             # optional: the file is produced at build time; xcodegen still adds it to Compile Sources.
             - path: target/uniffi-swift/piyo.swift
               optional: true
-            # zmx binary (built by scripts/build-zmx.sh) -> Contents/Resources/bin
+            # zmx binary (built by `just zmx`) -> Contents/Resources/bin
             - path: Resources/bin
               type: folder
               buildPhase: resources

@@ -1,6 +1,6 @@
 {
     "$schema": "./node_modules/oxfmt/configuration_schema.json",
-    "ignorePatterns": ["vendor/**"],
+    "ignorePatterns": ["vendor/**", "vendir.lock.yml"],
     "sortImports": true,
     "sortPackageJson": {
         "sortScripts": true

@@ -47,12 +47,11 @@ brew install --cask sotasan/tap/piyo
 ## 开发
 
 ```sh
-git clone --recursive https://github.com/sotasan/piyo.git
+git clone https://github.com/sotasan/piyo.git
 cd piyo
+mise trust
 mise install
-bun install
-mise run setup
-xcodegen generate
+just
 ```
 
 ## 许可证

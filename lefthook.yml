@@ -31,7 +31,7 @@ pre-commit:
 
         - name: diesel-schema
           # Fail if src/schema.rs is out of sync with the migrations (regenerate
-          # with `mise run db:prepare`). Hermetic: checks against a throwaway temp DB.
+          # with `just db-prepare`). Hermetic: checks against a throwaway temp DB.
           # root: diesel.toml lives in crates/core; glob is relative to it.
           root: "crates/core/"
           glob: "{src/schema.rs,migrations/**/*.sql}"

@@ -7,8 +7,11 @@ node_modules/
 .build/
 .swiftpm/
 
-# zmx multiplexer (built from the vendor/zmx submodule)
+# zmx multiplexer (built from vendored zmx source)
 /Resources/bin/
+
+# Vendored deps — populated by `vendir sync` (pinned in vendir.lock.yml)
+/vendor/
 
 # Generated Xcode project + build output (xcodegen / xcodebuild)
 /Piyo.xcodeproj/
