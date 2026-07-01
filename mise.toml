@@ -7,7 +7,7 @@ experimental = true
 bun = "latest"
 # sqlite-only, bundled SQLite — so cloning doesn't build the Postgres/MySQL
 # drivers. Used for migrations + regenerating src/schema.rs (migrations are truth).
-"cargo:diesel_cli" = { version = "2.3.10", default-features = false, features = "sqlite-bundled" }
+"cargo:diesel_cli" = { version = "latest", default-features = false, features = "sqlite-bundled" }
 rust = "stable"
 swiftformat = "latest"
 # Tasks live in the justfile; vendir fetches vendored deps, just runs the graph.
